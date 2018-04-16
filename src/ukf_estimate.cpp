@@ -1,12 +1,9 @@
 #include <ros/ros.h>
-
-
-
-
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include <eigen3/Eigen/Dense>
+#include <tf/transform_datatypes.h>
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 sensor_msgs::Imu imu_data;
 
@@ -30,9 +27,9 @@ typedef struct Measurement
 Measurement measurement;
 
 // Global variable
-Eigen::VectorXd state_; //x
+Eigen::VectorXd state_(15); //x
 Eigen::MatrixXd weightedCovarSqrt_; // square root of (L+lamda)*P_k-1
-Eigen::MatrixXd estimateErrorCovariance_; // P_k-1
+Eigen::MatrixXd estimateErrorCovariance_(15,15); // P_k-1
 std::vector<Eigen::VectorXd> sigmaPoints_;
 std::vector<double> stateWeights_;
 std::vector<double> covarWeights_;
@@ -73,10 +70,10 @@ bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
 }
 
 void initialize(){
-  double alpha = 0;
-  double kappa = 0;
-  double beta = 0;
-  double lambda_ = 0;
+  double alpha = 1;
+  double kappa = 2;
+  double beta = 3;
+  double lambda_ = 4;
   const int STATE_SIZE = 15;
   float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 31(15 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
@@ -91,12 +88,53 @@ void initialize(){
   covarWeights_[0] = stateWeights_[0] + (1 - (alpha * alpha) + beta);
   sigmaPoints_[0].setZero();
 
+
   for (size_t i = 1; i < sigmaCount; ++i)
   {
     sigmaPoints_[i].setZero();
     stateWeights_[i] =  1 / (2 * (STATE_SIZE + lambda_));
     covarWeights_[i] = stateWeights_[i];
   }
+
+  // Initialize Px
+  estimateErrorCovariance_(0,0) = 0.01;// x
+  estimateErrorCovariance_(1,1) = 0.02;// y
+  estimateErrorCovariance_(2,2) = 0.03;// z
+  estimateErrorCovariance_(3,3) = 0.04;// roll
+  estimateErrorCovariance_(4,4) = 0.05;// pitch
+  estimateErrorCovariance_(5,5) = 0.01;// yaw
+  estimateErrorCovariance_(6,6) = 0.01;// Vx
+  estimateErrorCovariance_(7,7) = 0.01;// Vy
+  estimateErrorCovariance_(8,8) = 0.01;// Vz
+  estimateErrorCovariance_(9,9) = 0.01;// Vroll
+  estimateErrorCovariance_(10,10) = 0.01;// Vpitch
+  estimateErrorCovariance_(11,11) = 0.01;// Vyaw
+  estimateErrorCovariance_(12,12) = 0.01;// Ax
+  estimateErrorCovariance_(13,13) = 0.01;// Ay
+  estimateErrorCovariance_(14,14) = 0.01;// Az
+  // Initialize state by using first measurement
+  state_(StateMemberX) = svo_pose.pose.pose.position.x;
+  state_(StateMemberY) = svo_pose.pose.pose.position.y;
+  state_(StateMemberZ) = svo_pose.pose.pose.position.z;
+  state_(StateMemberAx) = imu_data.linear_acceleration.x;
+  state_(StateMemberAy) = imu_data.linear_acceleration.y;
+  state_(StateMemberAz) = (imu_data.linear_acceleration.z - 9.8);
+}
+
+
+void quaternionToRPY(){
+  tf::Quaternion quat(imu_data.orientation.x, imu_data.orientation.y, imu_data.orientation.z, imu_data.orientation.w);
+  double roll, pitch, yaw;
+  tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+
+  geometry_msgs::Vector3 rpy;
+  rpy.x = roll = 5;
+  rpy.y = pitch = 5;
+  rpy.z = yaw = 5;
+  state_[StateMemberRoll] = rpy.x;
+  state_[StateMemberPitch] = rpy.y;
+  state_[StateMemberYaw] = rpy.z;
+
 }
 
 void correct(){
@@ -128,7 +166,7 @@ void correct(){
 
   // First, determine how many state vector values we're updating
 
-  size_t updateSize = measurement.updatesize;
+  size_t updateSize = measurement.updatesize ;
 
   // Now set up the relevant matrices
   Eigen::VectorXd stateSubset(updateSize);                              // x (in most literature)
@@ -229,10 +267,10 @@ void correct(){
 
 void predict(const double referenceTime, const double delta)
 {
-  Eigen::MatrixXd transferFunction_;
+  Eigen::MatrixXd transferFunction_(15,15);
 
   const int STATE_SIZE = 15;
-  double lambda_;
+  double lambda_ = 0.01;
   double roll = state_(StateMemberRoll);
   double pitch = state_(StateMemberPitch);
   double yaw = state_(StateMemberYaw);
@@ -281,12 +319,18 @@ void predict(const double referenceTime, const double delta)
 
   // (1) Take the square root of a small fraction of the estimateErrorCovariance_ using LL' decomposition
   // caculate square root of (L+lamda)*P_k-1
+  // This will be a diagonal matrix (15*15)
   weightedCovarSqrt_ = ((STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
+
   // (2) Compute sigma points *and* pass them through the transfer function to save
   // the extra loop
 
-  // First sigma point is the current state
+  // First sigma point(through transferfunction) is the current state
+  // x_k|k-1(0)
+  // sigmaPoint_[0][0~14]
   sigmaPoints_[0] = transferFunction_ * state_;
+
+
 
   // Next STATE_SIZE sigma points are state + weightedCovarSqrt_[ith column]
   // STATE_SIZE sigma points after that are state - weightedCovarSqrt_[ith column]
@@ -296,6 +340,8 @@ void predict(const double referenceTime, const double delta)
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE] = transferFunction_ * (state_ - weightedCovarSqrt_.col(sigmaInd));
   }
 
+
+
   // (3) Sum the weighted sigma points to generate a new state prediction
   // x_k_hat- = w_im * x_k|k-1
   state_.setZero();
@@ -303,7 +349,7 @@ void predict(const double referenceTime, const double delta)
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
-
+/*
   // (4) Now us the sigma points and the predicted state to compute a predicted covariance P_k-
   estimateErrorCovariance_.setZero();
   Eigen::VectorXd sigmaDiff(STATE_SIZE);
@@ -314,6 +360,7 @@ void predict(const double referenceTime, const double delta)
   }
   // Mark that we can keep these sigma points
       uncorrected_ = true;
+      */
 }
 
 
@@ -324,9 +371,11 @@ int main(int argc, char **argv)
   ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu2", 10, svo_cb);
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/mavros/imu/data", 10, imu_cb);
   initialize();
+  ros::Rate rate(50);
   while(ros::ok()){
-    predict(1,1);
-    correct();
+    quaternionToRPY();
+    predict(1,0.1);
+    //correct();
 
   }
 }
