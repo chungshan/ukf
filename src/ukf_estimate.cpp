@@ -15,15 +15,16 @@ void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
   imu_data = *msg;
 }
 
-typedef struct Measurement
+struct Measurement
 {
-  // The measurement and its associated covariance;
-  Eigen::VectorXd measurement_;
+  // The measurement and its associated covariance
+  std::vector<float> measurement_;
   Eigen::MatrixXd covariance_;
   int updatesize;
   double mahalanobisThresh_;
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-}Measurement;
+};
 Measurement measurement;
 
 // Global variable
@@ -73,7 +74,7 @@ void initialize(){
   double alpha = 1;
   double kappa = 2;
   double beta = 3;
-  double lambda_ = 4;
+  double lambda_ = 0.01;
   const int STATE_SIZE = 15;
   float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 31(15 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
@@ -137,6 +138,17 @@ void quaternionToRPY(){
 
 }
 
+void writeInMeasurement(){
+  measurement.measurement_.resize(15);
+  measurement.measurement_[StateMemberX] = svo_pose.pose.pose.position.x;
+  measurement.measurement_[StateMemberY] = svo_pose.pose.pose.position.y;
+  measurement.measurement_[StateMemberZ] = svo_pose.pose.pose.position.z;
+  measurement.measurement_[StateMemberAx] = imu_data.linear_acceleration.x;
+  measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y;
+  measurement.measurement_[StateMemberAz] = imu_data.linear_acceleration.z;
+
+}
+
 void correct(){
   double lambda_ = 0;
   const int STATE_SIZE = 15;
@@ -170,8 +182,8 @@ void correct(){
 
   // Now set up the relevant matrices
   Eigen::VectorXd stateSubset(updateSize);                              // x (in most literature)
-  Eigen::VectorXd measurementSubset(updateSize);                        // y
-  Eigen::MatrixXd measurementCovarianceSubset(updateSize, updateSize);  // Py
+  Eigen::VectorXd measurementSubset(STATE_SIZE);                        // y
+  Eigen::MatrixXd measurementCovarianceSubset(STATE_SIZE, STATE_SIZE);  // Py
   Eigen::MatrixXd stateToMeasurementSubset(STATE_SIZE, STATE_SIZE);     // H
   Eigen::MatrixXd kalmanGainSubset(STATE_SIZE, updateSize);             // K
   Eigen::VectorXd innovationSubset(updateSize);                         // y - Hx
@@ -194,19 +206,20 @@ void correct(){
   crossCovar.setZero();
 
   // Now build the sub-matrices from the full-sized matrices
-  for (size_t i = 0; i < updateSize; ++i){
-    measurementSubset(i) = measurement.measurement_(i);
-    stateSubset(i) = state_(i);
-    for (size_t j = 0; j < updateSize; ++j){
-      measurementCovarianceSubset(i,j) = measurement.covariance_(i);
-    }
+
+  for (size_t i = 0; i < STATE_SIZE; ++i){
+    measurementSubset(i) = measurement.measurement_[i];
+    //stateSubset(i) = state_(i);
+    //measurementCovarianceSubset(i,i) = measurement.covariance_(i,i);
+
    }
 
+  ROS_INFO("%f",float(measurementSubset[0]));
   // The state-to-measurement function, H, will now be a measurement_size x full_state_size
   // matrix, with ones in the (i, i) locations of the values to be updated
-  stateToMeasurementSubset(0,0) = 0;
-  stateToMeasurementSubset(1,1) = 0;
-  stateToMeasurementSubset(2,2) = 0;
+  stateToMeasurementSubset(0,0) = 1;
+  stateToMeasurementSubset(1,1) = 1;
+  stateToMeasurementSubset(2,2) = 1;
   stateToMeasurementSubset(3,3) = 0;
   stateToMeasurementSubset(4,4) = 0;
   stateToMeasurementSubset(5,5) = 0;
@@ -216,11 +229,20 @@ void correct(){
   stateToMeasurementSubset(9,9) = 0;
   stateToMeasurementSubset(10,10) = 0;
   stateToMeasurementSubset(11,11) = 0;
-  stateToMeasurementSubset(12,12) = 0;
-  stateToMeasurementSubset(13,13) = 0;
-  stateToMeasurementSubset(14,14) = 0;
+  stateToMeasurementSubset(12,12) = 1;
+  stateToMeasurementSubset(13,13) = 1;
+  stateToMeasurementSubset(14,14) = 1;
 
-  // (5) Generate sigma points, use them to generate a predicted measurement
+  //The measurecovariance subset
+
+  measurementCovarianceSubset(0,0) = 0.01;
+  measurementCovarianceSubset(1,1) = 0.01;
+  measurementCovarianceSubset(2,2) = 0.01;
+  measurementCovarianceSubset(12,12) = 0.01;
+  measurementCovarianceSubset(13,13) = 0.01;
+  measurementCovarianceSubset(14,14) = 0.01;
+
+  // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
   {
     sigmaPointMeasurements[sigmaInd] = stateToMeasurementSubset * sigmaPoints_[sigmaInd];
@@ -232,14 +254,16 @@ void correct(){
   // measurement covariance matrix P_yy and a state/measurement cross-covariance matrix P_xy.
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
   {
-    sigmaDiff = sigmaPointMeasurements[sigmaInd] - predictedMeasurement;
-    predictedMeasCovar.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());
-    crossCovar.noalias() += covarWeights_[sigmaInd] * ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());
+    sigmaDiff = sigmaPointMeasurements[sigmaInd] - predictedMeasurement;//Y(i)_k|k-1 - y_k_hat-
+    predictedMeasCovar.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());//P_y_k~_y_k_~
+    crossCovar.noalias() += covarWeights_[sigmaInd] * ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());//P_x_k_y_k
   }
 
-  // (7) Compute the Kalman gain, making sure to use the actual measurement covariance: K = P_xy * (P_yy + R)^-1
+  // (7) Compute the Kalman gain, making sure to use the actual measurement covariance: K = P_x_k_y_k * (P_y_k~_y_k_~ + R)^-1
+  // kalman gain :https://dsp.stackexchange.com/questions/2347/how-to-understand-kalman-gain-intuitively
   Eigen::MatrixXd invInnovCov = (predictedMeasCovar + measurementCovarianceSubset).inverse();
   kalmanGainSubset = crossCovar * invInnovCov;
+
 
   // (8) Apply the gain to the difference between the actual and predicted measurements: x = x + K(y - y_hat)
   // y - y_hat
@@ -263,6 +287,7 @@ void correct(){
     // Mark that we need to re-compute sigma points for successive corrections
     uncorrected_ = false;
   }
+
 }
 
 void predict(const double referenceTime, const double delta)
@@ -320,7 +345,8 @@ void predict(const double referenceTime, const double delta)
   // (1) Take the square root of a small fraction of the estimateErrorCovariance_ using LL' decomposition
   // caculate square root of (L+lamda)*P_k-1
   // This will be a diagonal matrix (15*15)
-  weightedCovarSqrt_ = ((STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
+  weightedCovarSqrt_ = ((0*STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
+
 
   // (2) Compute sigma points *and* pass them through the transfer function to save
   // the extra loop
@@ -342,6 +368,8 @@ void predict(const double referenceTime, const double delta)
 
 
 
+
+
   // (3) Sum the weighted sigma points to generate a new state prediction
   // x_k_hat- = w_im * x_k|k-1
   state_.setZero();
@@ -349,7 +377,8 @@ void predict(const double referenceTime, const double delta)
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
-/*
+
+
   // (4) Now us the sigma points and the predicted state to compute a predicted covariance P_k-
   estimateErrorCovariance_.setZero();
   Eigen::VectorXd sigmaDiff(STATE_SIZE);
@@ -360,7 +389,7 @@ void predict(const double referenceTime, const double delta)
   }
   // Mark that we can keep these sigma points
       uncorrected_ = true;
-      */
+
 }
 
 
@@ -374,8 +403,9 @@ int main(int argc, char **argv)
   ros::Rate rate(50);
   while(ros::ok()){
     quaternionToRPY();
+    writeInMeasurement();
     predict(1,0.1);
-    //correct();
+    correct();
 
   }
 }
