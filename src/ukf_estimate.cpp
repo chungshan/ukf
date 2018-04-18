@@ -71,20 +71,21 @@ bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
 }
 
 void initialize(){
-  double alpha = 1;
-  double kappa = 2;
-  double beta = 3;
-  double lambda_ = 0.01;
+  double alpha = 1e-3;
+  double kappa = 0;
+  double beta = 2;
+  double lambda_;
   const int STATE_SIZE = 15;
   float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 31(15 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
 
   //Prepare constants
-  //lamda, Wi_c, Wi_m
+  //lamda,
   lambda_ = alpha * alpha * (STATE_SIZE + kappa) - STATE_SIZE;
   stateWeights_.resize(sigmaCount);
   covarWeights_.resize(sigmaCount);
 
+  // Wi_c, Wi_m
   stateWeights_[0] = lambda_ / (STATE_SIZE + lambda_);
   covarWeights_[0] = stateWeights_[0] + (1 - (alpha * alpha) + beta);
   sigmaPoints_[0].setZero();
@@ -113,13 +114,15 @@ void initialize(){
   estimateErrorCovariance_(12,12) = 0.01;// Ax
   estimateErrorCovariance_(13,13) = 0.01;// Ay
   estimateErrorCovariance_(14,14) = 0.01;// Az
-  // Initialize state by using first measurement
+  // Initialize state by using first measurement x_0
   state_(StateMemberX) = svo_pose.pose.pose.position.x;
   state_(StateMemberY) = svo_pose.pose.pose.position.y;
   state_(StateMemberZ) = svo_pose.pose.pose.position.z;
   state_(StateMemberAx) = imu_data.linear_acceleration.x;
   state_(StateMemberAy) = imu_data.linear_acceleration.y;
   state_(StateMemberAz) = (imu_data.linear_acceleration.z - 9.8);
+
+
 }
 
 
@@ -294,6 +297,7 @@ void predict(const double referenceTime, const double delta)
 {
   Eigen::MatrixXd transferFunction_(15,15);
 
+
   const int STATE_SIZE = 15;
   double lambda_ = 0.01;
   double roll = state_(StateMemberRoll);
@@ -311,6 +315,7 @@ void predict(const double referenceTime, const double delta)
   double cy = ::cos(yaw);
 
   // Prepare the transfer function
+  transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = 1;
   transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
   transferFunction_(StateMemberX, StateMemberVy) = (cy * sp * sr - sy * cr) * delta;
   transferFunction_(StateMemberX, StateMemberVz) = (cy * sp * cr + sy * sr) * delta;
