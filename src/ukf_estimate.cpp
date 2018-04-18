@@ -4,9 +4,10 @@
 #include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include <eigen3/Eigen/Dense>
 #include <tf/transform_datatypes.h>
+#include <nav_msgs/Odometry.h>
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 sensor_msgs::Imu imu_data;
-
+nav_msgs::Odometry filterd;
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
 }
@@ -22,19 +23,25 @@ struct Measurement
   Eigen::MatrixXd covariance_;
   int updatesize;
   double mahalanobisThresh_;
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 
 };
 Measurement measurement;
 
 // Global variable
-Eigen::VectorXd state_(15); //x
+Eigen::VectorXd state_(18); //x
 Eigen::MatrixXd weightedCovarSqrt_; // square root of (L+lamda)*P_k-1
-Eigen::MatrixXd estimateErrorCovariance_(15,15); // P_k-1
+Eigen::MatrixXd estimateErrorCovariance_(18,18); // P_k-1
 std::vector<Eigen::VectorXd> sigmaPoints_;
 std::vector<double> stateWeights_;
 std::vector<double> covarWeights_;
+double lambda_;
 bool uncorrected_;
+
+/*test variable*/
+
+
+
 
 enum StateMembers
 {
@@ -52,7 +59,10 @@ enum StateMembers
   StateMemberVyaw,
   StateMemberAx,
   StateMemberAy,
-  StateMemberAz
+  StateMemberAz,
+  StateMemberFx,
+  StateMemberFy,
+  StateMemberFz
 };
 
 bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
@@ -71,12 +81,19 @@ bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
 }
 
 void initialize(){
+  /*test variable*/
+  svo_pose.pose.pose.position.x = 0.1;
+  svo_pose.pose.pose.position.y = 0.2;
+  svo_pose.pose.pose.position.z = 0.3;
+  imu_data.linear_acceleration.x = 0.1;
+  imu_data.linear_acceleration.y = 0.2;
+  imu_data.linear_acceleration.z = 9.9;
+  /*test variable*/
   double alpha = 1e-3;
   double kappa = 0;
   double beta = 2;
-  double lambda_;
-  const int STATE_SIZE = 15;
-  float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 31(15 states)
+  const int STATE_SIZE = 18;
+  float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 37(18 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
 
   //Prepare constants
@@ -114,6 +131,9 @@ void initialize(){
   estimateErrorCovariance_(12,12) = 0.01;// Ax
   estimateErrorCovariance_(13,13) = 0.01;// Ay
   estimateErrorCovariance_(14,14) = 0.01;// Az
+  estimateErrorCovariance_(15,15) = 0.01;//Fx
+  estimateErrorCovariance_(16,16) = 0.01;//Fy
+  estimateErrorCovariance_(17,17) = 0.01;//Fz
   // Initialize state by using first measurement x_0
   state_(StateMemberX) = svo_pose.pose.pose.position.x;
   state_(StateMemberY) = svo_pose.pose.pose.position.y;
@@ -125,38 +145,68 @@ void initialize(){
 
 }
 
+double clamRotation(double rotation)
+{
+  const double PI = 3.141592653589793;
+  const double TAU = 6.283185307179587;
+  while (rotation > PI)
+  {
+    rotation -= TAU;
+  }
+
+  while (rotation < -PI)
+  {
+    rotation += TAU;
+  }
+
+  return rotation;
+}
 
 void quaternionToRPY(){
+  imu_data.orientation.x = 0.1;
+  imu_data.orientation.y = 0.05;
+  imu_data.orientation.z = 0.1;
+  imu_data.orientation.w = 1;
   tf::Quaternion quat(imu_data.orientation.x, imu_data.orientation.y, imu_data.orientation.z, imu_data.orientation.w);
   double roll, pitch, yaw;
   tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
 
   geometry_msgs::Vector3 rpy;
-  rpy.x = roll = 5;
-  rpy.y = pitch = 5;
-  rpy.z = yaw = 5;
+  rpy.x = roll;
+  rpy.y = pitch;
+  rpy.z = yaw;
   state_[StateMemberRoll] = rpy.x;
   state_[StateMemberPitch] = rpy.y;
   state_[StateMemberYaw] = rpy.z;
+  //ROS_INFO("roll = %f, pitch = %f, yaw = %f", state_[StateMemberRoll],state_[StateMemberPitch],state_[StateMemberYaw]);
 
 }
 
 void writeInMeasurement(){
-  measurement.measurement_.resize(15);
-  measurement.measurement_[StateMemberX] = svo_pose.pose.pose.position.x;
-  measurement.measurement_[StateMemberY] = svo_pose.pose.pose.position.y;
-  measurement.measurement_[StateMemberZ] = svo_pose.pose.pose.position.z;
-  measurement.measurement_[StateMemberAx] = imu_data.linear_acceleration.x;
-  measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y;
-  measurement.measurement_[StateMemberAz] = imu_data.linear_acceleration.z;
+  /*test*/
+  svo_pose.pose.pose.position.x = 0.1;
+  svo_pose.pose.pose.position.y = 0.2;
+  svo_pose.pose.pose.position.z = 0.3;
+  imu_data.linear_acceleration.x = 1.1;
+  imu_data.linear_acceleration.y = 0.0;
+  imu_data.linear_acceleration.z = 9.9 - 9.8;
+  /*test*/
+  measurement.measurement_.resize(18);
+  measurement.measurement_[StateMemberX] = svo_pose.pose.pose.position.x ;
+  measurement.measurement_[StateMemberY] = svo_pose.pose.pose.position.y ;
+  measurement.measurement_[StateMemberZ] = svo_pose.pose.pose.position.z ;
+  measurement.measurement_[StateMemberAx] = imu_data.linear_acceleration.x ;
+  measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y ;
+  measurement.measurement_[StateMemberAz] = imu_data.linear_acceleration.z ;
+  //ROS_INFO("meas_x = %f, mea_y = %f", measurement.measurement_[StateMemberX], measurement.measurement_[StateMemberY]);
 
 }
 
 void correct(){
-  double lambda_ = 0;
-  const int STATE_SIZE = 15;
 
-
+  const int STATE_SIZE = 18;
+  const double PI = 3.141592653589793;
+  const double TAU = 6.283185307179587;
 
   //correct, calculate sigma points, if uncorrected = true ,than this loop won't be run.
   if (!uncorrected_)
@@ -192,7 +242,7 @@ void correct(){
   Eigen::VectorXd innovationSubset(updateSize);                         // y - Hx
   Eigen::VectorXd predictedMeasurement(updateSize);
   Eigen::VectorXd sigmaDiff(updateSize);
-  Eigen::MatrixXd predictedMeasCovar(updateSize, updateSize);
+  Eigen::MatrixXd predictedMeasCovar(STATE_SIZE, STATE_SIZE);
   Eigen::MatrixXd crossCovar(STATE_SIZE, updateSize);
 
   std::vector<Eigen::VectorXd> sigmaPointMeasurements(sigmaPoints_.size(), Eigen::VectorXd(updateSize));
@@ -217,7 +267,6 @@ void correct(){
 
    }
 
-  ROS_INFO("%f",float(measurementSubset[0]));
   // The state-to-measurement function, H, will now be a measurement_size x full_state_size
   // matrix, with ones in the (i, i) locations of the values to be updated
   stateToMeasurementSubset(0,0) = 1;
@@ -235,6 +284,9 @@ void correct(){
   stateToMeasurementSubset(12,12) = 1;
   stateToMeasurementSubset(13,13) = 1;
   stateToMeasurementSubset(14,14) = 1;
+  stateToMeasurementSubset(15,15) = 0;
+  stateToMeasurementSubset(16,16) = 0;
+  stateToMeasurementSubset(17,17) = 0;
 
   //The measurecovariance subset
 
@@ -244,6 +296,7 @@ void correct(){
   measurementCovarianceSubset(12,12) = 0.01;
   measurementCovarianceSubset(13,13) = 0.01;
   measurementCovarianceSubset(14,14) = 0.01;
+  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 1e-2;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
@@ -252,6 +305,7 @@ void correct(){
     // y = sum of (wi*yi)
     predictedMeasurement.noalias() += stateWeights_[sigmaInd] * sigmaPointMeasurements[sigmaInd];
   }
+  //ROS_INFO("predic_mea = %f", predictedMeasurement[0]);
 
   // (6) Use the sigma point measurements and predicted measurement to compute a predicted
   // measurement covariance matrix P_yy and a state/measurement cross-covariance matrix P_xy.
@@ -261,31 +315,88 @@ void correct(){
     predictedMeasCovar.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());//P_y_k~_y_k_~
     crossCovar.noalias() += covarWeights_[sigmaInd] * ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());//P_x_k_y_k
   }
+  //ROS_INFO("predictedMeasCovar = %f", predictedMeasCovar(10,10));
+  ROS_INFO("crossCovar = %f",crossCovar(10,10));
 
   // (7) Compute the Kalman gain, making sure to use the actual measurement covariance: K = P_x_k_y_k * (P_y_k~_y_k_~ + R)^-1
   // kalman gain :https://dsp.stackexchange.com/questions/2347/how-to-understand-kalman-gain-intuitively
   Eigen::MatrixXd invInnovCov = (predictedMeasCovar + measurementCovarianceSubset).inverse();
+  //Eigen::MatrixXd inv_test = predictedMeasCovar + measurementCovarianceSubset;
+  //ROS_INFO("invInnovCov = %f", invInnovCov(17,17));
   kalmanGainSubset = crossCovar * invInnovCov;
+  //ROS_INFO("kalmanGain = %f", kalmanGainSubset(5,5));
 
 
   // (8) Apply the gain to the difference between the actual and predicted measurements: x = x + K(y - y_hat)
   // y - y_hat
+  //ROS_INFO("measure = %f",measurementSubset[0]);
+  //ROS_INFO("predic_measure = %f", predictedMeasurement[0]);
 
   innovationSubset = (measurementSubset - predictedMeasurement);
+  //ROS_INFO("innovationSubset = %f", innovationSubset[0]);
+  //Eigen::MatrixXd test = kalmanGainSubset * innovationSubset;
+  //ROS_INFO("%f", test(0,0));
+  //ROS_INFO("state = %f", state_[0]);
 
   // Wrap angles in the innovation
+  while (innovationSubset(StateMemberRoll) < -PI)
+   {
+   innovationSubset(StateMemberRoll) += TAU;
+   }
+
+   while (innovationSubset(StateMemberRoll) > PI)
+   {
+    innovationSubset(StateMemberRoll) -= TAU;
+   }
+
+   while (innovationSubset(StateMemberYaw) < -PI)
+    {
+    innovationSubset(StateMemberYaw) += TAU;
+    }
+
+    while (innovationSubset(StateMemberYaw) > PI)
+    {
+     innovationSubset(StateMemberYaw) -= TAU;
+    }
+
+    while (innovationSubset(StateMemberPitch) < -PI)
+     {
+     innovationSubset(StateMemberPitch) += TAU;
+     }
+
+     while (innovationSubset(StateMemberPitch) > PI)
+     {
+      innovationSubset(StateMemberPitch) -= TAU;
+     }
+     //double sqMahalanobis = innovationSubset.dot(invInnovCov * innovationSubset);
+     //double threshold = 1 * 1;
+     //ROS_INFO("sq = %f, thr = %f", sqMahalanobis, threshold);
 
   // (8.1) Check Mahalanobis distance of innovation
-
+  measurement.mahalanobisThresh_ = 1;
   if (checkMahalanobisThreshold(innovationSubset, invInnovCov, measurement.mahalanobisThresh_))
   {
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
+    ROS_INFO("state = %f", state_[0]);
+
+    filterd.pose.pose.position.x = state_[0];
+    filterd.pose.pose.position.y = state_[1];
+    filterd.pose.pose.position.z = state_[2];
+    filterd.twist.twist.linear.x = state_[6];
+    filterd.twist.twist.linear.y = state_[7];
+    filterd.twist.twist.linear.z = state_[8];
+    //ROS_INFO("filtered_x = %f", filterd.pose.pose.position.x);
+
+
 
     // (9) Compute the new estimate error covariance P = P - (K * P_yy * K')
     estimateErrorCovariance_.noalias() -= (kalmanGainSubset * predictedMeasCovar * kalmanGainSubset.transpose());
 
     //wrapStateAngles();
+    state_(StateMemberRoll) = clamRotation(state_(StateMemberRoll));
+    state_(StateMemberYaw) = clamRotation(state_(StateMemberYaw));
+    state_(StateMemberPitch) = clamRotation(state_(StateMemberPitch));
 
     // Mark that we need to re-compute sigma points for successive corrections
     uncorrected_ = false;
@@ -295,11 +406,12 @@ void correct(){
 
 void predict(const double referenceTime, const double delta)
 {
-  Eigen::MatrixXd transferFunction_(15,15);
+  Eigen::MatrixXd transferFunction_(18,18);
+  double m = 1;
+  const int STATE_SIZE = 18;
 
 
-  const int STATE_SIZE = 15;
-  double lambda_ = 0.01;
+
   double roll = state_(StateMemberRoll);
   double pitch = state_(StateMemberPitch);
   double yaw = state_(StateMemberYaw);
@@ -313,7 +425,7 @@ void predict(const double referenceTime, const double delta)
 
   double sy = ::sin(yaw);
   double cy = ::cos(yaw);
-
+  //ROS_INFO("sp = %f, cp = %f, sy = %f", sp , cp, sy);
   // Prepare the transfer function
   transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = 1;
   transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
@@ -346,12 +458,20 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberVx, StateMemberAx) = delta;
   transferFunction_(StateMemberVy, StateMemberAy) = delta;
   transferFunction_(StateMemberVz, StateMemberAz) = delta;
-
+  transferFunction_(StateMemberFx,StateMemberAx) = m*cy * cp;
+  transferFunction_(StateMemberFx,StateMemberAy) = m*(cy * sp * sr - sy * cr);
+  transferFunction_(StateMemberFx,StateMemberAz) = m*(cy * sp * cr + sy * sr);
+  transferFunction_(StateMemberFy,StateMemberAx) = m*sy * cp;
+  transferFunction_(StateMemberFy,StateMemberAy) = m*(sy * sp * sr + cy * cr);
+  transferFunction_(StateMemberFy,StateMemberAz) = m*(sy * sp * cr - cy * sr);
+  transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
+  transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
+  transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr ;
   // (1) Take the square root of a small fraction of the estimateErrorCovariance_ using LL' decomposition
   // caculate square root of (L+lamda)*P_k-1
   // This will be a diagonal matrix (15*15)
-  weightedCovarSqrt_ = ((0*STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
-
+  weightedCovarSqrt_ = ((STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
+  //ROS_INFO("%f", estimateErrorCovariance_(0,0));
 
   // (2) Compute sigma points *and* pass them through the transfer function to save
   // the extra loop
@@ -360,6 +480,7 @@ void predict(const double referenceTime, const double delta)
   // x_k|k-1(0)
   // sigmaPoint_[0][0~14]
   sigmaPoints_[0] = transferFunction_ * state_;
+  //ROS_INFO("%f", sigmaPoints_[0][1]);
 
 
 
@@ -370,8 +491,7 @@ void predict(const double referenceTime, const double delta)
     sigmaPoints_[sigmaInd + 1] = transferFunction_ * (state_ + weightedCovarSqrt_.col(sigmaInd));
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE] = transferFunction_ * (state_ - weightedCovarSqrt_.col(sigmaInd));
   }
-
-
+  //ROS_INFO("sigma = %f", sigmaPoints_[2][1]);
 
 
 
@@ -382,6 +502,7 @@ void predict(const double referenceTime, const double delta)
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
+  //ROS_INFO("state = %f",state_[0]);
 
 
   // (4) Now us the sigma points and the predicted state to compute a predicted covariance P_k-
@@ -404,13 +525,17 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu2", 10, svo_cb);
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/mavros/imu/data", 10, imu_cb);
+  ros::Publisher filtered_pub = nh.advertise<nav_msgs::Odometry>("/filtered/odom",10);
   initialize();
   ros::Rate rate(50);
   while(ros::ok()){
+    filterd.header.stamp = ros::Time::now();
     quaternionToRPY();
     writeInMeasurement();
-    predict(1,0.1);
+    predict(1,0.01);
     correct();
+    filtered_pub.publish(filterd);
+    rate.sleep();
 
   }
 }
