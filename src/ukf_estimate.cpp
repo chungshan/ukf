@@ -37,7 +37,7 @@ std::vector<double> stateWeights_;
 std::vector<double> covarWeights_;
 double lambda_;
 bool uncorrected_;
-
+int flag;
 /*test variable*/
 
 
@@ -118,7 +118,7 @@ void initialize(){
     covarWeights_[i] = stateWeights_[i];
   }
 
-  // Initialize Px
+  // Initialize Px,P_k-1
   estimateErrorCovariance_(0,0) = 1e-02;// x
   estimateErrorCovariance_(1,1) = 1e-02;// y
   estimateErrorCovariance_(2,2) = 1e-02;// z
@@ -168,8 +168,15 @@ void quaternionToRPY(){
   imu_data.orientation.z = 0.1;
   imu_data.orientation.w = 1;*/
   if(imu_data.orientation.w == 0)
+  {
     imu_data.orientation.w = 1;
-  ROS_INFO("imu = %f", imu_data.orientation.w);
+    flag = 0;
+  }
+  if(imu_data.orientation.w != 0 && imu_data.orientation.w != 1)
+    flag = 1;
+
+  //ROS_INFO("flag = %d", flag);
+  //ROS_INFO("imu = %f", imu_data.orientation.w);
   tf::Quaternion quat(imu_data.orientation.x, imu_data.orientation.y, imu_data.orientation.z, imu_data.orientation.w);
   double roll, pitch, yaw;
   tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
@@ -300,7 +307,7 @@ void correct(){
   measurementCovarianceSubset(12,12) = 0.01;
   measurementCovarianceSubset(13,13) = 0.01;
   measurementCovarianceSubset(14,14) = 0.01;
-  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 1e-2;
+  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 0.01;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
@@ -319,14 +326,14 @@ void correct(){
     predictedMeasCovar.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());//P_y_k~_y_k_~
     crossCovar.noalias() += covarWeights_[sigmaInd] * ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());//P_x_k_y_k
   }
-  //ROS_INFO("predictedMeasCovar = %f", predictedMeasCovar(10,10));
+  ROS_INFO("predictedMeasCovar = %f", predictedMeasCovar(0,0));
   //ROS_INFO("crossCovar = %f",crossCovar(10,10));
 
   // (7) Compute the Kalman gain, making sure to use the actual measurement covariance: K = P_x_k_y_k * (P_y_k~_y_k_~ + R)^-1
   // kalman gain :https://dsp.stackexchange.com/questions/2347/how-to-understand-kalman-gain-intuitively
   Eigen::MatrixXd invInnovCov = (predictedMeasCovar + measurementCovarianceSubset).inverse();
   //Eigen::MatrixXd inv_test = predictedMeasCovar + measurementCovarianceSubset;
-  //ROS_INFO("invInnovCov = %f", invInnovCov(17,17));
+  //ROS_INFO("invInnovCov = %f", invInnovCov(0,0));
   kalmanGainSubset = crossCovar * invInnovCov;
   //ROS_INFO("kalmanGain = %f", kalmanGainSubset(5,5));
 
@@ -337,7 +344,7 @@ void correct(){
   //ROS_INFO("predic_measure = %f", predictedMeasurement[0]);
 
   innovationSubset = (measurementSubset - predictedMeasurement);
-  //ROS_INFO("innovationSubset = %f", innovationSubset[0]);
+  ROS_INFO("innovationSubset = %f", innovationSubset[0]);
   //Eigen::MatrixXd test = kalmanGainSubset * innovationSubset;
   //ROS_INFO("%f", test(0,0));
   //ROS_INFO("state = %f", state_[0]);
@@ -372,9 +379,9 @@ void correct(){
      {
       innovationSubset(StateMemberPitch) -= TAU;
      }
-     //double sqMahalanobis = innovationSubset.dot(invInnovCov * innovationSubset);
+     double sqMahalanobis = innovationSubset.dot(invInnovCov * innovationSubset);
      //double threshold = 1 * 1;
-     //ROS_INFO("sq = %f, thr = %f", sqMahalanobis, threshold);
+     ROS_INFO("sq = %f", sqMahalanobis);
 
   // (8.1) Check Mahalanobis distance of innovation
   measurement.mahalanobisThresh_ = 8;
@@ -521,6 +528,7 @@ void predict(const double referenceTime, const double delta)
     //ROS_INFO("sigmaDiff = %f", sigmaDiff[0]);
     estimateErrorCovariance_.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());
   }
+  //ROS_INFO("estimateErrorCov = %f", estimateErrorCovariance_(0,0));
   // Mark that we can keep these sigma points
       uncorrected_ = true;
 
@@ -540,12 +548,16 @@ int main(int argc, char **argv)
     filterd.header.stamp = ros::Time::now();
 
     quaternionToRPY();
+    if(flag ==1)
+    {
     writeInMeasurement();
     predict(1,0.01);
     correct();
+    }
     filtered_pub.publish(filterd);
     ros::spinOnce();
     rate.sleep();
+
 
   }
 }
