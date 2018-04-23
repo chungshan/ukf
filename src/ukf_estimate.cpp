@@ -108,9 +108,11 @@ void initialize(){
 
   // Wi_c, Wi_m
   stateWeights_[0] = lambda_ / (STATE_SIZE + lambda_);
-  covarWeights_[0] = stateWeights_[0] + (1 - (alpha * alpha) + beta);
+  //stateWeights_[0] = 1 / (sigmaCount);
+  covarWeights_[0] =  stateWeights_[0] + (1 - (alpha * alpha) + beta);
   sigmaPoints_[0].setZero();
-
+  //ROS_INFO("stateWeights = %f", stateWeights_[0]);
+  ROS_INFO("covarWeights[0] = %f", covarWeights_[0]);
 
   for (size_t i = 1; i < sigmaCount; ++i)
   {
@@ -118,6 +120,7 @@ void initialize(){
     stateWeights_[i] =  1 / (2 * (STATE_SIZE + lambda_));
     covarWeights_[i] = stateWeights_[i];
   }
+  ROS_INFO("stateWeights[i] = %f", stateWeights_[1]);
 
   // Initialize Px,P_k-1
   estimateErrorCovariance_(0,0) = 1e-02;// x
@@ -213,7 +216,8 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberZ] = svo_pose.pose.pose.position.z ;
   measurement.measurement_[StateMemberAx] = imu_data.linear_acceleration.x ;
   measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y ;
-  measurement.measurement_[StateMemberAz] = imu_data.linear_acceleration.z ;
+  measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - 9.8);
+  //ROS_INFO("ax = %f", measurement.measurement_[StateMemberAz]);
 
   //ROS_INFO("meas_x = %f, mea_y = %f", measurement.measurement_[StateMemberX], measurement.measurement_[StateMemberY]);
 
@@ -323,6 +327,7 @@ void correct(){
     predictedMeasurement.noalias() += stateWeights_[sigmaInd] * sigmaPointMeasurements[sigmaInd];
   }
   //ROS_INFO("predic_mea = %f", predictedMeasurement[0]);
+  //ROS_INFO("stateWeights = %f", stateWeights_[0]);
 
   // (6) Use the sigma point measurements and predicted measurement to compute a predicted
   // measurement covariance matrix P_yy and a state/measurement cross-covariance matrix P_xy.
@@ -342,7 +347,9 @@ void correct(){
     }
  }
  */
-  ROS_INFO("predictedMeasCovar = %f", predictedMeasCovar(0,0));
+  //ROS_INFO("sigmaPointMeasurements = %f", sigmaPointMeasurements[0][0]);
+  //ROS_INFO("predictedMeasCovar = %f", predictedMeasCovar(0,0));
+  //ROS_INFO("sigmadiff = %f", sigmaDiff(0,0));
   //ROS_INFO("crossCovar = %f",crossCovar(10,10));
 
   // (7) Compute the Kalman gain, making sure to use the actual measurement covariance: K = P_x_k_y_k * (P_y_k~_y_k_~ + R)^-1
@@ -399,12 +406,13 @@ void correct(){
      double threshold = 1 * 1;
      ROS_INFO("sq = %f", sqMahalanobis);
 
+
   // (8.1) Check Mahalanobis distance of innovation
   if (checkMahalanobisThreshold(innovationSubset, invInnovCov, measurement.mahalanobisThresh_))
   {
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
-    ROS_INFO("state = %f", state_[3]);
+    ROS_INFO("state = %f", state_[6]);
 
     filterd.pose.pose.position.x = state_[0];
     filterd.pose.pose.position.y = state_[1];
@@ -432,6 +440,9 @@ void correct(){
     measurement.mahalanobisThresh_ = 4;
 
   }
+  else
+    measurement.mahalanobisThresh_ = 64;
+  //ROS_INFO("thrshold = %f", measurement.mahalanobisThresh_);
 
 }
 
@@ -510,7 +521,7 @@ void predict(const double referenceTime, const double delta)
   // First sigma point(through transferfunction) is the current state
   // x_k|k-1(0)
   // sigmaPoint_[0][0~14]
-  //ROS_INFO("state_x = %f", state_[0]);
+  //ROS_INFO("state_x = %f", state_[6]);
   sigmaPoints_[0] = transferFunction_ * state_;
   //ROS_INFO("%f", sigmaPoints_[0][0]);
 
@@ -534,7 +545,7 @@ void predict(const double referenceTime, const double delta)
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
-  //ROS_INFO("state = %f",state_[0]);
+  //ROS_INFO("state = %f",state_[6]);
 
 
   // (4) Now us the sigma points and the predicted state to compute a predicted covariance P_k-
@@ -566,6 +577,8 @@ int main(int argc, char **argv)
   ros::Rate rate(50);
   while(ros::ok()){
     filterd.header.stamp = ros::Time::now();
+    //imu_data.header.stamp = ros::Time::now();
+    //svo_pose.header.stamp = ros::Time::now();
 
     quaternionToRPY();
     if(flag ==1)
