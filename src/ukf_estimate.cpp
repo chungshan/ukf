@@ -38,6 +38,7 @@ std::vector<double> covarWeights_;
 double lambda_;
 bool uncorrected_;
 int flag;
+int flag2;
 /*test variable*/
 
 
@@ -140,6 +141,11 @@ void initialize(){
 
   // Initialize state by using first measurement x_0
   state_.setZero();
+
+  uncorrected_ = false;
+
+  measurement.mahalanobisThresh_ = 64;
+
 
 
 }
@@ -299,14 +305,14 @@ void correct(){
   stateToMeasurementSubset(16,16) = 0;
   stateToMeasurementSubset(17,17) = 0;
 
-  //The measurecovariance subset
+  //The measurecovariance subset R
 
-  measurementCovarianceSubset(0,0) = 0.01;
-  measurementCovarianceSubset(1,1) = 0.01;
-  measurementCovarianceSubset(2,2) = 0.01;
-  measurementCovarianceSubset(12,12) = 0.01;
-  measurementCovarianceSubset(13,13) = 0.01;
-  measurementCovarianceSubset(14,14) = 0.01;
+  measurementCovarianceSubset(0,0) = 0.1;
+  measurementCovarianceSubset(1,1) = 0.1;
+  measurementCovarianceSubset(2,2) = 0.1;
+  measurementCovarianceSubset(12,12) = 0.1;
+  measurementCovarianceSubset(13,13) = 0.1;
+  measurementCovarianceSubset(14,14) = 0.1;
   measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 0.01;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
@@ -326,6 +332,16 @@ void correct(){
     predictedMeasCovar.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());//P_y_k~_y_k_~
     crossCovar.noalias() += covarWeights_[sigmaInd] * ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());//P_x_k_y_k
   }
+  /*
+  for(int i = 0; i < (STATE_SIZE - 1); i++)
+    for(int j = 0; j < (STATE_SIZE - 1); j++)
+ {
+    {
+
+        predictedMeasCovar(i,j) = 0.1;
+    }
+ }
+ */
   ROS_INFO("predictedMeasCovar = %f", predictedMeasCovar(0,0));
   //ROS_INFO("crossCovar = %f",crossCovar(10,10));
 
@@ -344,7 +360,7 @@ void correct(){
   //ROS_INFO("predic_measure = %f", predictedMeasurement[0]);
 
   innovationSubset = (measurementSubset - predictedMeasurement);
-  ROS_INFO("innovationSubset = %f", innovationSubset[0]);
+  //ROS_INFO("innovationSubset = %f", innovationSubset[3]);
   //Eigen::MatrixXd test = kalmanGainSubset * innovationSubset;
   //ROS_INFO("%f", test(0,0));
   //ROS_INFO("state = %f", state_[0]);
@@ -380,16 +396,15 @@ void correct(){
       innovationSubset(StateMemberPitch) -= TAU;
      }
      double sqMahalanobis = innovationSubset.dot(invInnovCov * innovationSubset);
-     //double threshold = 1 * 1;
+     double threshold = 1 * 1;
      ROS_INFO("sq = %f", sqMahalanobis);
 
   // (8.1) Check Mahalanobis distance of innovation
-  measurement.mahalanobisThresh_ = 8;
   if (checkMahalanobisThreshold(innovationSubset, invInnovCov, measurement.mahalanobisThresh_))
   {
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
-    //ROS_INFO("state = %f", state_[0]);
+    ROS_INFO("state = %f", state_[3]);
 
     filterd.pose.pose.position.x = state_[0];
     filterd.pose.pose.position.y = state_[1];
@@ -403,6 +418,9 @@ void correct(){
 
     // (9) Compute the new estimate error covariance P = P - (K * P_yy * K')
     estimateErrorCovariance_.noalias() -= (kalmanGainSubset * predictedMeasCovar * kalmanGainSubset.transpose());
+    //ROS_INFO("predict::estimate = %f",estimateErrorCovariance_(0,0));
+    //ROS_INFO("kalman gain = %f", kalmanGainSubset(0,0));
+    //ROS_INFO("predictedMeas = %f", predictedMeasCovar(0,0));
 
     //wrapStateAngles();
     state_(StateMemberRoll) = clamRotation(state_(StateMemberRoll));
@@ -411,6 +429,8 @@ void correct(){
 
     // Mark that we need to re-compute sigma points for successive corrections
     uncorrected_ = false;
+    measurement.mahalanobisThresh_ = 4;
+
   }
 
 }
