@@ -30,7 +30,7 @@ Measurement measurement;
 
 // Global variable
 Eigen::VectorXd state_(18); //x
-Eigen::MatrixXd weightedCovarSqrt_; // square root of (L+lamda)*P_k-1
+Eigen::MatrixXd weightedCovarSqrt_(18,18); // square root of (L+lamda)*P_k-1
 Eigen::MatrixXd estimateErrorCovariance_(18,18); // P_k-1
 std::vector<Eigen::VectorXd> sigmaPoints_;
 std::vector<double> stateWeights_;
@@ -82,6 +82,7 @@ bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
 }
 
 void initialize(){
+  ROS_INFO("initilaize");
   /*test variable*/
   /*
   svo_pose.pose.pose.position.x = 0.1;
@@ -110,18 +111,25 @@ void initialize(){
   stateWeights_[0] = lambda_ / (STATE_SIZE + lambda_);
   //stateWeights_[0] = 1 / (sigmaCount);
   covarWeights_[0] =  stateWeights_[0] + (1 - (alpha * alpha) + beta);
+  //covarWeights_[0] = 1 / (sigmaCount);
   sigmaPoints_[0].setZero();
   //ROS_INFO("stateWeights = %f", stateWeights_[0]);
-  ROS_INFO("covarWeights[0] = %f", covarWeights_[0]);
+  //ROS_INFO("covarWeights[0] = %f", covarWeights_[0]);
 
   for (size_t i = 1; i < sigmaCount; ++i)
   {
     sigmaPoints_[i].setZero();
     stateWeights_[i] =  1 / (2 * (STATE_SIZE + lambda_));
+    //stateWeights_[i] = 1 / (sigmaCount);
     covarWeights_[i] = stateWeights_[i];
   }
-  ROS_INFO("stateWeights[i] = %f", stateWeights_[1]);
-
+  //ROS_INFO("stateWeights[i] = %f", stateWeights_[1]);
+  /*
+  for (int i = 0; i < sigmaCount; i++)
+  {
+    printf("%f", stateWeights_[i]);
+  }
+*/
   // Initialize Px,P_k-1
   estimateErrorCovariance_(0,0) = 1e-02;// x
   estimateErrorCovariance_(1,1) = 1e-02;// y
@@ -141,6 +149,24 @@ void initialize(){
   estimateErrorCovariance_(15,15) = 1e-02;//Fx
   estimateErrorCovariance_(16,16) = 1e-02;//Fy
   estimateErrorCovariance_(17,17) = 1e-02;//Fz
+  for (int i = 0; i < 18; i++){
+    for (int j = 0; j < 18; j++){
+      estimateErrorCovariance_(i,j) = 1e-02;
+    }
+  }
+
+
+/*
+  for (int i = 0; i < 18; i++){
+    for (int j = 0; j < 18; j++){
+
+        printf("%.3f ", estimateErrorCovariance_(i,j));
+
+
+    }
+    printf("\n");
+  }
+*/
 
   // Initialize state by using first measurement x_0
   state_.setZero();
@@ -183,6 +209,7 @@ void quaternionToRPY(){
   }
   if(imu_data.orientation.w != 0 && imu_data.orientation.w != 1)
     flag = 1;
+  //ROS_INFO("imu.x = %f", imu_data.orientation.x);
 
   //ROS_INFO("flag = %d", flag);
   //ROS_INFO("imu = %f", imu_data.orientation.w);
@@ -197,8 +224,16 @@ void quaternionToRPY(){
   state_[StateMemberRoll] = rpy.x;
   state_[StateMemberPitch] = rpy.y;
   state_[StateMemberYaw] = rpy.z;
+  state_[StateMemberAx] = imu_data.linear_acceleration.x;
+  state_[StateMemberAy] = imu_data.linear_acceleration.y;
+  state_[StateMemberAz] = (imu_data.linear_acceleration.z - 9.8);
   //ROS_INFO("roll = %f, pitch = %f, yaw = %f", state_[StateMemberRoll],state_[StateMemberPitch],state_[StateMemberYaw]);
-
+/*
+  for (int i = 0; i < 18; i++){
+  printf("%f ", state_[i]);
+  }
+  printf("\n");
+*/
 }
 
 void writeInMeasurement(){
@@ -218,7 +253,13 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y ;
   measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - 9.8);
   //ROS_INFO("ax = %f", measurement.measurement_[StateMemberAz]);
-
+  /*printf measurement_[i]
+  for (int i = 0; i < 18 ; i++)
+  {
+    printf("%f ",measurement.measurement_[i]);
+  }
+  printf("\n");
+*/
   //ROS_INFO("meas_x = %f, mea_y = %f", measurement.measurement_[StateMemberX], measurement.measurement_[StateMemberY]);
 
 }
@@ -404,7 +445,7 @@ void correct(){
      }
      double sqMahalanobis = innovationSubset.dot(invInnovCov * innovationSubset);
      double threshold = 1 * 1;
-     ROS_INFO("sq = %f", sqMahalanobis);
+     //ROS_INFO("sq = %f", sqMahalanobis);
 
 
   // (8.1) Check Mahalanobis distance of innovation
@@ -412,7 +453,7 @@ void correct(){
   {
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
-    ROS_INFO("state = %f", state_[6]);
+    //ROS_INFO("state = %f", state_[6]);
 
     filterd.pose.pose.position.x = state_[0];
     filterd.pose.pose.position.y = state_[1];
@@ -509,12 +550,35 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
   transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
   transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr ;
+  /* print transfer function
+  for (int i = 0;i < 18; i++){
+    for (int j = 0; j < 18; j++){
+      printf("%f ", transferFunction_(i,j));
+    }
+    printf("\n");
+  }
+  printf("\n");
+*/
   // (1) Take the square root of a small fraction of the estimateErrorCovariance_ using LL' decomposition
   // caculate square root of (L+lamda)*P_k-1
   // This will be a diagonal matrix (18*18)
-  weightedCovarSqrt_ = ((STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
-  //ROS_INFO("%f", weightedCovarSqrt_(0,0));
 
+  weightedCovarSqrt_ = ((STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
+
+
+
+  //ROS_INFO("%f", weightedCovarSqrt_(0,0));
+ // printf weightedCovarSqrt
+/*
+ printf("---weightedCovarSqrt---\n");
+  for (int i = 0; i < 18; i++){
+    for (int j = 0 ; j < 18; j++){
+      printf("%f ", weightedCovarSqrt_(i,j));
+    }
+    printf("\n");
+  }
+  printf("\n");
+*/
   // (2) Compute sigma points *and* pass them through the transfer function to save
   // the extra loop
 
@@ -524,6 +588,18 @@ void predict(const double referenceTime, const double delta)
   //ROS_INFO("state_x = %f", state_[6]);
   sigmaPoints_[0] = transferFunction_ * state_;
   //ROS_INFO("%f", sigmaPoints_[0][0]);
+/*
+  for (int j = 0; j < 18; j++){
+    printf("%f ", sigmaPoints_[0][j]);
+  }
+  printf("\n");
+*/
+
+  printf("---state---\n");
+  for (int i = 0; i < 18; i++){
+    printf("%f ", state_[i]);
+  }
+  printf("\n");
 
 
 
@@ -535,8 +611,20 @@ void predict(const double referenceTime, const double delta)
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE] = transferFunction_ * (state_ - weightedCovarSqrt_.col(sigmaInd));
   }
   //ROS_INFO("sigma = %f", sigmaPoints_[2][1]);
+  //print state_ + weightCovarSqrt
 
 
+  //print sigmaPoints
+  /*
+printf("---sigmaPoints---\n");
+  for (int i = 0; i < 37 ; i++){
+    for (int j = 0; j< 18 ; j++){
+      printf("%f ", sigmaPoints_[i][j]);
+    }
+    printf("\n");
+  }
+printf("\n");
+*/
 
   // (3) Sum the weighted sigma points to generate a new state prediction
   // x_k_hat- = w_im * x_k|k-1
@@ -546,11 +634,37 @@ void predict(const double referenceTime, const double delta)
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
   //ROS_INFO("state = %f",state_[6]);
-
-
+/*
+  for (int i = 0; i < 18; i++){
+    printf("%f ", state_[i]);
+  }
+  printf("\n");
+*/
+/*
+  ROS_INFO("initial covariance");
+  for (int i = 0; i < 18; i++){
+    for (int j = 0 ; j<18; j++){
+      printf("%f ", estimateErrorCovariance_(i,j));
+    }
+    printf("\n");
+  }
+  printf("\n");
+  */
   // (4) Now us the sigma points and the predicted state to compute a predicted covariance P_k-
   estimateErrorCovariance_.setZero();
+ /*
+  printf("---sigmaPoints---\n");
+  for (int j = 0; j < 18; j++){
+    printf("%f ", sigmaPoints_[30][j]);
 
+  }
+  printf("\n");
+  printf("---state_---\n");
+  for (int j = 0; j < 18; j++){
+    printf("%f ", state_[j]);
+  }
+  printf("\n");
+*/
   Eigen::VectorXd sigmaDiff(STATE_SIZE);
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
   {
@@ -559,8 +673,25 @@ void predict(const double referenceTime, const double delta)
     //ROS_INFO("sigmaDiff = %f", sigmaDiff[0]);
     estimateErrorCovariance_.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());
   }
+
+/*
+  printf("---sigmaDiff---\n");
+  for(int i = 0; i < 18; i++){
+      printf("%f ", sigmaDiff[i]);
+  }
+*/
   //ROS_INFO("estimateErrorCov = %f", estimateErrorCovariance_(0,0));
-  // Mark that we can keep these sigma points
+  /*
+  ROS_INFO("predicted covariance");
+  for (int i = 0; i < 18; i++){
+    for (int j = 0 ; j<18; j++){
+      printf("%f ", estimateErrorCovariance_(i,j));
+    }
+    printf("\n");
+  }
+  printf("\n");
+ */
+// Mark that we can keep these sigma points
       uncorrected_ = true;
 
 }
@@ -581,14 +712,16 @@ int main(int argc, char **argv)
     //svo_pose.header.stamp = ros::Time::now();
 
     quaternionToRPY();
+
     if(flag ==1)
     {
     writeInMeasurement();
     predict(1,0.01);
-    correct();
+    //correct();
     }
     filtered_pub.publish(filterd);
-    ros::spinOnce();
+
+  ros::spinOnce();
     rate.sleep();
 
 
