@@ -32,6 +32,7 @@ Measurement measurement;
 Eigen::VectorXd state_(18); //x
 Eigen::MatrixXd weightedCovarSqrt_(18,18); // square root of (L+lamda)*P_k-1
 Eigen::MatrixXd estimateErrorCovariance_(18,18); // P_k-1
+Eigen::VectorXd process_noise(18);
 std::vector<Eigen::VectorXd> sigmaPoints_;
 std::vector<double> stateWeights_;
 std::vector<double> covarWeights_;
@@ -108,10 +109,10 @@ void initialize(){
   covarWeights_.resize(sigmaCount);
 
   // Wi_c, Wi_m
-  stateWeights_[0] = lambda_ / (STATE_SIZE + lambda_);
-  //stateWeights_[0] = 1 / (sigmaCount);
-  covarWeights_[0] =  stateWeights_[0] + (1 - (alpha * alpha) + beta);
-  //covarWeights_[0] = 1 / (sigmaCount);
+  //stateWeights_[0] = lambda_ / (STATE_SIZE + lambda_);
+  stateWeights_[0] = 1 / (sigmaCount);
+  //covarWeights_[0] =  stateWeights_[0] + (1 - (alpha * alpha) + beta);
+  covarWeights_[0] = 1 / (sigmaCount);
   sigmaPoints_[0].setZero();
   //ROS_INFO("stateWeights = %f", stateWeights_[0]);
   //ROS_INFO("covarWeights[0] = %f", covarWeights_[0]);
@@ -119,41 +120,49 @@ void initialize(){
   for (size_t i = 1; i < sigmaCount; ++i)
   {
     sigmaPoints_[i].setZero();
-    stateWeights_[i] =  1 / (2 * (STATE_SIZE + lambda_));
-    //stateWeights_[i] = 1 / (sigmaCount);
+    //stateWeights_[i] =  1 / (2 * (STATE_SIZE + lambda_));
+    stateWeights_[i] = 1 / (sigmaCount);
     covarWeights_[i] = stateWeights_[i];
   }
+/*
+  float sum = 0;
+  for(size_t i = 0; i< sigmaCount;i++)
+  {
+    sum = sum + stateWeights_[i];
+  }
+  ROS_INFO("sum of weight = %f", sum);
   //ROS_INFO("stateWeights[i] = %f", stateWeights_[1]);
-  /*
+
   for (int i = 0; i < sigmaCount; i++)
   {
-    printf("%f", stateWeights_[i]);
+    printf("%f\n", stateWeights_[i]);
   }
 */
   // Initialize Px,P_k-1
-  estimateErrorCovariance_(0,0) = 1e-02;// x
-  estimateErrorCovariance_(1,1) = 1e-02;// y
-  estimateErrorCovariance_(2,2) = 1e-02;// z
-  estimateErrorCovariance_(3,3) = 1e-02;// roll
-  estimateErrorCovariance_(4,4) = 1e-02;// pitch
-  estimateErrorCovariance_(5,5) = 1e-02;// yaw
-  estimateErrorCovariance_(6,6) = 1e-02;// Vx
-  estimateErrorCovariance_(7,7) = 1e-02;// Vy
-  estimateErrorCovariance_(8,8) = 1e-02;// Vz
-  estimateErrorCovariance_(9,9) = 1e-02;// Vroll
-  estimateErrorCovariance_(10,10) = 1e-02;// Vpitch
-  estimateErrorCovariance_(11,11) = 1e-02;// Vyaw
-  estimateErrorCovariance_(12,12) = 1e-02;// Ax
-  estimateErrorCovariance_(13,13) = 1e-02;// Ay
-  estimateErrorCovariance_(14,14) = 1e-02;// Az
-  estimateErrorCovariance_(15,15) = 1e-02;//Fx
-  estimateErrorCovariance_(16,16) = 1e-02;//Fy
-  estimateErrorCovariance_(17,17) = 1e-02;//Fz
-  for (int i = 0; i < 18; i++){
-    for (int j = 0; j < 18; j++){
-      estimateErrorCovariance_(i,j) = 1e-02;
-    }
+  estimateErrorCovariance_(0,0) = 1e-03;// x
+  estimateErrorCovariance_(1,1) = 1e-03;// y
+  estimateErrorCovariance_(2,2) = 1e-03;// z
+  estimateErrorCovariance_(3,3) = 1e-06;// roll
+  estimateErrorCovariance_(4,4) = 1e-06;// pitch
+  estimateErrorCovariance_(5,5) = 1e-06;// yaw
+  estimateErrorCovariance_(6,6) = 1e-06;// Vx
+  estimateErrorCovariance_(7,7) = 1e-06;// Vy
+  estimateErrorCovariance_(8,8) = 1e-06;// Vz
+  estimateErrorCovariance_(9,9) = 1e-06;// Vroll
+  estimateErrorCovariance_(10,10) = 1e-06;// Vpitch
+  estimateErrorCovariance_(11,11) = 1e-06;// Vyaw
+  estimateErrorCovariance_(12,12) = 1e-03;// Ax
+  estimateErrorCovariance_(13,13) = 1e-03;// Ay
+  estimateErrorCovariance_(14,14) = 1e-03;// Az
+  estimateErrorCovariance_(15,15) = 1e-06;//Fx
+  estimateErrorCovariance_(16,16) = 1e-06;//Fy
+  estimateErrorCovariance_(17,17) = 1e-06;//Fz
+
+  //process noise
+  for(int i = 0; i < 18; i++){
+    process_noise[i] = 0.01;
   }
+
 
 
 /*
@@ -173,7 +182,7 @@ void initialize(){
 
   uncorrected_ = false;
 
-  measurement.mahalanobisThresh_ = 64;
+  measurement.mahalanobisThresh_ = 8;
 
 
 
@@ -265,6 +274,7 @@ void writeInMeasurement(){
 }
 
 void correct(){
+  ROS_INFO("---correct start---\n");
 
   const int STATE_SIZE = 18;
   const double PI = 3.141592653589793;
@@ -352,13 +362,13 @@ void correct(){
 
   //The measurecovariance subset R
 
-  measurementCovarianceSubset(0,0) = 0.1;
-  measurementCovarianceSubset(1,1) = 0.1;
-  measurementCovarianceSubset(2,2) = 0.1;
-  measurementCovarianceSubset(12,12) = 0.1;
-  measurementCovarianceSubset(13,13) = 0.1;
-  measurementCovarianceSubset(14,14) = 0.1;
-  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 0.01;
+  measurementCovarianceSubset(0,0) = 1;
+  measurementCovarianceSubset(1,1) = 1;
+  measurementCovarianceSubset(2,2) = 1;
+  measurementCovarianceSubset(12,12) = 1;
+  measurementCovarianceSubset(13,13) = 1;
+  measurementCovarianceSubset(14,14) = 1;
+  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 5;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
@@ -367,6 +377,13 @@ void correct(){
     // y = sum of (wi*yi)
     predictedMeasurement.noalias() += stateWeights_[sigmaInd] * sigmaPointMeasurements[sigmaInd];
   }
+  /*
+  for(int i = 0; i < 18; i++){
+    printf("%f ", predictedMeasurement[i]);
+
+  }
+  printf("\n");
+  */
   //ROS_INFO("predic_mea = %f", predictedMeasurement[0]);
   //ROS_INFO("stateWeights = %f", stateWeights_[0]);
 
@@ -379,15 +396,23 @@ void correct(){
     crossCovar.noalias() += covarWeights_[sigmaInd] * ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());//P_x_k_y_k
   }
   /*
-  for(int i = 0; i < (STATE_SIZE - 1); i++)
-    for(int j = 0; j < (STATE_SIZE - 1); j++)
- {
-    {
-
-        predictedMeasCovar(i,j) = 0.1;
+  printf("---P_y_k~_y_k_~---\n");
+  for(int i = 0; i < 18; i++){
+    for(int j = 0 ; j < 18; j++){
+      printf("%f ", predictedMeasCovar(i,j));
     }
- }
- */
+    printf("\n");
+  }
+  printf("\n");
+  printf("---P_x_k_y_k---\n");
+  for(int i = 0; i < 18; i++){
+    for(int j = 0 ; j < 18; j++){
+      printf("%f ", crossCovar(i,j));
+    }
+    printf("\n");
+  }
+  printf("\n");
+  */
   //ROS_INFO("sigmaPointMeasurements = %f", sigmaPointMeasurements[0][0]);
   //ROS_INFO("predictedMeasCovar = %f", predictedMeasCovar(0,0));
   //ROS_INFO("sigmadiff = %f", sigmaDiff(0,0));
@@ -400,7 +425,16 @@ void correct(){
   //ROS_INFO("invInnovCov = %f", invInnovCov(0,0));
   kalmanGainSubset = crossCovar * invInnovCov;
   //ROS_INFO("kalmanGain = %f", kalmanGainSubset(5,5));
-
+/*
+  printf("---kalmanGain---\n");
+  for(int i = 0;i<18;i++){
+    for(int j = 0; j < 18; j++){
+      printf("%f ", kalmanGainSubset(i,j));
+    }
+    printf("\n");
+  }
+  printf("\n");
+*/
 
   // (8) Apply the gain to the difference between the actual and predicted measurements: x = x + K(y - y_hat)
   // y - y_hat
@@ -412,6 +446,12 @@ void correct(){
   //Eigen::MatrixXd test = kalmanGainSubset * innovationSubset;
   //ROS_INFO("%f", test(0,0));
   //ROS_INFO("state = %f", state_[0]);
+
+  printf("---(y-y_hat)---\n");
+  for(int i = 0; i < 18; i++){
+    printf("%f ", innovationSubset[i]);
+  }
+  printf("\n");
 
   // Wrap angles in the innovation
   while (innovationSubset(StateMemberRoll) < -PI)
@@ -445,7 +485,7 @@ void correct(){
      }
      double sqMahalanobis = innovationSubset.dot(invInnovCov * innovationSubset);
      double threshold = 1 * 1;
-     //ROS_INFO("sq = %f", sqMahalanobis);
+     ROS_INFO("sq = %f", sqMahalanobis);
 
 
   // (8.1) Check Mahalanobis distance of innovation
@@ -453,7 +493,8 @@ void correct(){
   {
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
-    //ROS_INFO("state = %f", state_[6]);
+    ROS_INFO("state = %f", state_[8]);
+
 
     filterd.pose.pose.position.x = state_[0];
     filterd.pose.pose.position.y = state_[1];
@@ -478,11 +519,14 @@ void correct(){
 
     // Mark that we need to re-compute sigma points for successive corrections
     uncorrected_ = false;
-    measurement.mahalanobisThresh_ = 4;
+    measurement.mahalanobisThresh_ = 2;
+    ROS_INFO("---correct success!!---\n");
 
   }
-  else
-    measurement.mahalanobisThresh_ = 64;
+  else{
+    measurement.mahalanobisThresh_ = 8;
+    ROS_INFO("---correct fail!!---\n");
+  }
   //ROS_INFO("thrshold = %f", measurement.mahalanobisThresh_);
 
 }
@@ -564,7 +608,26 @@ void predict(const double referenceTime, const double delta)
   // This will be a diagonal matrix (18*18)
 
   weightedCovarSqrt_ = ((STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
-
+  /*
+  Eigen::MatrixXd L = estimateErrorCovariance_.llt().matrixL();
+  Eigen::MatrixXd L_ = L*L.transpose();
+  printf("---L---\n");
+  for(int i = 0;i < 18;i++){
+    for(int j = 0 ; j<18;j++){
+      printf("%f ", L(i,j));
+    }
+    printf("\n");
+  }
+  printf("\n");
+  printf("---L_---\n");
+  for(int i = 0;i < 18;i++){
+    for(int j = 0 ; j<18;j++){
+      printf("%f ", L_(i,j));
+    }
+    printf("\n");
+  }
+  printf("\n");
+*/
 
 
   //ROS_INFO("%f", weightedCovarSqrt_(0,0));
@@ -594,13 +657,13 @@ void predict(const double referenceTime, const double delta)
   }
   printf("\n");
 */
-
+/*
   printf("---state---\n");
   for (int i = 0; i < 18; i++){
     printf("%f ", state_[i]);
   }
   printf("\n");
-
+*/
 
 
   // Next STATE_SIZE sigma points are state + weightedCovarSqrt_[ith column]
@@ -615,7 +678,7 @@ void predict(const double referenceTime, const double delta)
 
 
   //print sigmaPoints
-  /*
+/*
 printf("---sigmaPoints---\n");
   for (int i = 0; i < 37 ; i++){
     for (int j = 0; j< 18 ; j++){
@@ -633,13 +696,25 @@ printf("\n");
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
-  //ROS_INFO("state = %f",state_[6]);
-/*
-  for (int i = 0; i < 18; i++){
-    printf("%f ", state_[i]);
-  }
-  printf("\n");
+  /*
+  printf("---state before adding noise---\n");
+
+    for (int i = 0; i < 18; i++){
+      printf("%f ", state_[i]);
+    }
+    printf("\n");
 */
+  state_ = state_ + process_noise;
+  /*
+  printf("---state adding noise---\n");
+
+    for (int i = 0; i < 18; i++){
+      printf("%f ", state_[i]);
+    }
+    printf("\n");
+*/
+  //ROS_INFO("state = %f",state_[6]);
+
 /*
   ROS_INFO("initial covariance");
   for (int i = 0; i < 18; i++){
@@ -681,7 +756,7 @@ printf("\n");
   }
 */
   //ROS_INFO("estimateErrorCov = %f", estimateErrorCovariance_(0,0));
-  /*
+/*
   ROS_INFO("predicted covariance");
   for (int i = 0; i < 18; i++){
     for (int j = 0 ; j<18; j++){
@@ -690,7 +765,7 @@ printf("\n");
     printf("\n");
   }
   printf("\n");
- */
+*/
 // Mark that we can keep these sigma points
       uncorrected_ = true;
 
@@ -717,8 +792,9 @@ int main(int argc, char **argv)
     {
     writeInMeasurement();
     predict(1,0.01);
-    //correct();
+    correct();
     }
+
     filtered_pub.publish(filterd);
 
   ros::spinOnce();
