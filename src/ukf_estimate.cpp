@@ -109,10 +109,10 @@ void initialize(){
   covarWeights_.resize(sigmaCount);
 
   // Wi_c, Wi_m
-  //stateWeights_[0] = lambda_ / (STATE_SIZE + lambda_);
-  stateWeights_[0] = 1 / (sigmaCount);
-  //covarWeights_[0] =  stateWeights_[0] + (1 - (alpha * alpha) + beta);
-  covarWeights_[0] = 1 / (sigmaCount);
+  stateWeights_[0] = lambda_ / (STATE_SIZE + lambda_);
+  //stateWeights_[0] = 1 / (sigmaCount);
+  covarWeights_[0] =  stateWeights_[0] + (1 - (alpha * alpha) + beta);
+  //covarWeights_[0] = 1 / (sigmaCount);
   sigmaPoints_[0].setZero();
   //ROS_INFO("stateWeights = %f", stateWeights_[0]);
   //ROS_INFO("covarWeights[0] = %f", covarWeights_[0]);
@@ -120,8 +120,8 @@ void initialize(){
   for (size_t i = 1; i < sigmaCount; ++i)
   {
     sigmaPoints_[i].setZero();
-    //stateWeights_[i] =  1 / (2 * (STATE_SIZE + lambda_));
-    stateWeights_[i] = 1 / (sigmaCount);
+    stateWeights_[i] =  1 / (2 * (STATE_SIZE + lambda_));
+    //stateWeights_[i] = 1 / (sigmaCount);
     covarWeights_[i] = stateWeights_[i];
   }
 /*
@@ -151,21 +151,23 @@ void initialize(){
   estimateErrorCovariance_(9,9) = 1e-06;// Vroll
   estimateErrorCovariance_(10,10) = 1e-06;// Vpitch
   estimateErrorCovariance_(11,11) = 1e-06;// Vyaw
-  estimateErrorCovariance_(12,12) = 1e-03;// Ax
-  estimateErrorCovariance_(13,13) = 1e-03;// Ay
-  estimateErrorCovariance_(14,14) = 1e-03;// Az
+  estimateErrorCovariance_(12,12) = 1e-02;// Ax
+  estimateErrorCovariance_(13,13) = 1e-02;// Ay
+  estimateErrorCovariance_(14,14) = 1e-02;// Az
   estimateErrorCovariance_(15,15) = 1e-06;//Fx
   estimateErrorCovariance_(16,16) = 1e-06;//Fy
   estimateErrorCovariance_(17,17) = 1e-06;//Fz
 
   //process noise
   for(int i = 0; i < 18; i++){
-    process_noise[i] = 0.02;
+    process_noise[i] = 0.0001;
   }
 
-  process_noise[6] = 0.03;
-  process_noise[7] = 0.03;
-  process_noise[8] = 0.03;
+
+
+  process_noise[6] = 0.005;
+  process_noise[7] = 0.005;
+  process_noise[8] = 0.005;
 
 
 
@@ -378,13 +380,13 @@ void correct(){
 
   //The measurecovariance subset R
 
-  measurementCovarianceSubset(0,0) = 2;
-  measurementCovarianceSubset(1,1) = 2;
-  measurementCovarianceSubset(2,2) = 2;
-  measurementCovarianceSubset(12,12) = 0.01;
-  measurementCovarianceSubset(13,13) = 0.01;
-  measurementCovarianceSubset(14,14) = 0.01;
-  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 2;
+  measurementCovarianceSubset(0,0) = 0.4;
+  measurementCovarianceSubset(1,1) = 0.4;
+  measurementCovarianceSubset(2,2) = 0.4;
+  measurementCovarianceSubset(12,12) = 0.2;
+  measurementCovarianceSubset(13,13) = 0.2;
+  measurementCovarianceSubset(14,14) = 0.2;
+  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 0.4;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
@@ -490,16 +492,16 @@ void correct(){
   //ROS_INFO("invInnovCov = %f", invInnovCov(0,0));
   kalmanGainSubset = crossCovar * invInnovCov;
   //ROS_INFO("kalmanGain = %f", kalmanGainSubset(5,5));
-
+/*
   for(int i = 0;i < 18; i ++){
     for(int j = 12; j < 15; j++){
-      if(kalmanGainSubset(i,j) > 0.5)
-        kalmanGainSubset(i,j) = 0.5;
-      else if(kalmanGainSubset(i,j) < -0.5)
-        kalmanGainSubset(i,j) = -0.5;
+      if(kalmanGainSubset(i,j) > 0.1)
+        kalmanGainSubset(i,j) = 0.1;
+      else if(kalmanGainSubset(i,j) < -0.1)
+        kalmanGainSubset(i,j) = -0.1;
     }
   }
-
+*/
   printf("---kalmanGain---\n");
   for(int i = 0;i<18;i++){
     for(int j = 0; j < 18; j++){
