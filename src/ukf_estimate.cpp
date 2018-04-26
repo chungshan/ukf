@@ -139,9 +139,9 @@ void initialize(){
   }
 */
   // Initialize Px,P_k-1
-  estimateErrorCovariance_(0,0) = 1e-06;// x
-  estimateErrorCovariance_(1,1) = 1e-06;// y
-  estimateErrorCovariance_(2,2) = 1e-06;// z
+  estimateErrorCovariance_(0,0) = 1e-02;// x
+  estimateErrorCovariance_(1,1) = 1e-02;// y
+  estimateErrorCovariance_(2,2) = 1e-02;// z
   estimateErrorCovariance_(3,3) = 1e-06;// roll
   estimateErrorCovariance_(4,4) = 1e-06;// pitch
   estimateErrorCovariance_(5,5) = 1e-06;// yaw
@@ -157,7 +157,7 @@ void initialize(){
   estimateErrorCovariance_(15,15) = 1e-06;//Fx
   estimateErrorCovariance_(16,16) = 1e-06;//Fy
   estimateErrorCovariance_(17,17) = 1e-06;//Fz
-
+/*
   //process noise
   for(int i = 0; i < 18; i++){
     process_noise[i] = 0.0001;
@@ -168,7 +168,7 @@ void initialize(){
   process_noise[6] = 0.005;
   process_noise[7] = 0.005;
   process_noise[8] = 0.005;
-
+*/
 
 
 
@@ -238,14 +238,25 @@ void quaternionToRPY(){
   rpy.x = roll;
   rpy.y = pitch;
   rpy.z = yaw;
+
   state_[StateMemberRoll] = rpy.x;
   state_[StateMemberPitch] = rpy.y;
   state_[StateMemberYaw] = rpy.z;
 
+  /*
+  state_[StateMemberRoll] = 0;
+  state_[StateMemberPitch] = 0;
+  state_[StateMemberYaw] = 0;
+*/
+/*
+  state_[StateMemberAx] = 0;
+  state_[StateMemberAy] = 0;
+  state_[StateMemberAz] = 0;
+/*
   state_[StateMemberAx] = imu_data.linear_acceleration.x;
   state_[StateMemberAy] = imu_data.linear_acceleration.y;
   state_[StateMemberAz] = (imu_data.linear_acceleration.z - 9.8);
-
+*/
   //ROS_INFO("roll = %f, pitch = %f, yaw = %f", state_[StateMemberRoll],state_[StateMemberPitch],state_[StateMemberYaw]);
 /*
   for (int i = 0; i < 18; i++){
@@ -270,11 +281,20 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberY] = svo_pose.pose.pose.position.y ;
   measurement.measurement_[StateMemberZ] = svo_pose.pose.pose.position.z ;
 */
+  measurement.measurement_[StateMemberX] = 0 ;
+  measurement.measurement_[StateMemberY] = 0 ;
+  measurement.measurement_[StateMemberZ] = 0 ;
+
 
   measurement.measurement_[StateMemberAx] = imu_data.linear_acceleration.x ;
   measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y ;
   measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - 9.8);
 
+  /*
+  measurement.measurement_[StateMemberAx] = 0 ;
+  measurement.measurement_[StateMemberAy] = 0 ;
+  measurement.measurement_[StateMemberAz] = 0 ;
+*/
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
   state_[StateMemberFz] = 0;
@@ -321,7 +341,7 @@ void correct(){
 
   // First, determine how many state vector values we're updating
 
-  size_t updateSize = measurement.updatesize ;
+  size_t updateSize = 18 ;
 
   // Now set up the relevant matrices
   Eigen::VectorXd stateSubset(updateSize);                              // x (in most literature)
@@ -359,9 +379,9 @@ void correct(){
 
   // The state-to-measurement function, H, will now be a measurement_size x full_state_size
   // matrix, with ones in the (i, i) locations of the values to be updated
-  stateToMeasurementSubset(0,0) = 0;
-  stateToMeasurementSubset(1,1) = 0;
-  stateToMeasurementSubset(2,2) = 0;
+  stateToMeasurementSubset(0,0) = 1;
+  stateToMeasurementSubset(1,1) = 1;
+  stateToMeasurementSubset(2,2) = 1;
   stateToMeasurementSubset(3,3) = 0;
   stateToMeasurementSubset(4,4) = 0;
   stateToMeasurementSubset(5,5) = 0;
@@ -380,9 +400,9 @@ void correct(){
 
   //The measurecovariance subset R
 
-  measurementCovarianceSubset(0,0) = 0.4;
-  measurementCovarianceSubset(1,1) = 0.4;
-  measurementCovarianceSubset(2,2) = 0.4;
+  measurementCovarianceSubset(0,0) = 0.2;
+  measurementCovarianceSubset(1,1) = 0.2;
+  measurementCovarianceSubset(2,2) = 0.2;
   measurementCovarianceSubset(12,12) = 0.2;
   measurementCovarianceSubset(13,13) = 0.2;
   measurementCovarianceSubset(14,14) = 0.2;
@@ -415,20 +435,35 @@ void correct(){
 */
   // (6) Use the sigma point measurements and predicted measurement to compute a predicted
   // measurement covariance matrix P_yy and a state/measurement cross-covariance matrix P_xy.
+
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
   {
     sigmaDiff = sigmaPointMeasurements[sigmaInd] - predictedMeasurement;//Y(i)_k|k-1 - y_k_hat-
     predictedMeasCovar.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());//P_y_k~_y_k_~
     crossCovar.noalias() += covarWeights_[sigmaInd] * ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());//P_x_k_y_k
   }
+  /*
+  Eigen::MatrixXd crossCovar1(STATE_SIZE, updateSize);
+  for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
+  {
+    crossCovar1 = ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());
+    for(int i = 0; i < 18; i++){
+      for(int j = 0 ; j < 18; j++){
+        printf("%f \n", crossCovar(i,j));
+      }
+      printf("---next crossCovar---\n");
+    }
+
+  }
+*/
   //check p_y_k~_y_k_~ value
-  for (int i = 0; i < 18 ; i++){
+  for (int i = 3; i < 18 ; i++){
     for (int j = 0; j < 12 ; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 11; i < 18;i++){
-    for (int j =0; j < 12 ; j++){
+  for (int i = 0; i < 3;i++){
+    for (int j =3; j < 18 ; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
@@ -437,14 +472,18 @@ void correct(){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 15; i < 18; i++){
-    for(int j = 12; j < 18; j++){
+  for (int i = 12; i < 18; i++){
+    for(int j = 15; j < 18; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
+  for (int i = 15; i < 18; i++){
+    for (int j = 12; j < 15;j++)
+      predictedMeasCovar(i,j) = 0;
+  }
   //check P_x_k_y_k value
   for(int i = 0; i < 18; i++){
-    for(int j = 0; j < 12; j++){
+    for(int j = 3; j < 12; j++){
       crossCovar(i,j) = 0;
     }
   }
@@ -793,7 +832,7 @@ printf("\n");
     }
     printf("\n");
 */
-  state_ = state_ + process_noise;
+  //state_ = state_ + process_noise;
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
   state_[StateMemberFz] = 0;
@@ -860,6 +899,7 @@ printf("\n");
 */
 // Mark that we can keep these sigma points
       uncorrected_ = true;
+      //ROS_INFO("Vx = %f, Vy = %f, Vz = %f", state_[6], state_[7], state_[8]);
       ROS_INFO("---Predict end---");
 
 }
