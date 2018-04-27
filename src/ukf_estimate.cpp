@@ -276,17 +276,18 @@ void writeInMeasurement(){
   imu_data.linear_acceleration.z = 9.9 - 9.8;
   test*/
   measurement.measurement_.resize(18);
-/*
+
   measurement.measurement_[StateMemberX] = svo_pose.pose.pose.position.x ;
   measurement.measurement_[StateMemberY] = svo_pose.pose.pose.position.y ;
   measurement.measurement_[StateMemberZ] = svo_pose.pose.pose.position.z ;
-*/
+
+/*
   measurement.measurement_[StateMemberX] = 0 ;
   measurement.measurement_[StateMemberY] = 0 ;
   measurement.measurement_[StateMemberZ] = 0 ;
+*/
 
-
-  measurement.measurement_[StateMemberAx] = imu_data.linear_acceleration.x ;
+  measurement.measurement_[StateMemberAx] = -imu_data.linear_acceleration.x ;
   measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y ;
   measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - 9.8);
 
@@ -662,6 +663,7 @@ void predict(const double referenceTime, const double delta)
 {
   ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(18,18);
+  Eigen::MatrixXd process_noise_m(18,18);
   double m = 1;
   const int STATE_SIZE = 18;
 
@@ -722,6 +724,25 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
   transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
   transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr ;
+
+  process_noise_m(0,0) = 0.01;
+  process_noise_m(1,1) = 0.01;
+  process_noise_m(2,2) = 0.01;
+  process_noise_m(3,3) = 0.01;
+  process_noise_m(4,4) = 0.01;
+  process_noise_m(5,5) = 0.01;
+  process_noise_m(6,6) = 0.01;
+  process_noise_m(7,7) = 0.01;
+  process_noise_m(8,8) = 0.01;
+  process_noise_m(9,9) = 0.01;
+  process_noise_m(10,10) = 0.01;
+  process_noise_m(11,11) = 0.01;
+  process_noise_m(12,12) = 0.01;
+  process_noise_m(13,13) = 0.01;
+  process_noise_m(14,14) = 0.01;
+  process_noise_m(15,15) = 0.01;
+  process_noise_m(16,16) = 0.01;
+  process_noise_m(17,17) = 0.01;
    //print transfer function
  /*
   printf("---transfer function---\n");
@@ -879,6 +900,7 @@ printf("\n");
     //ROS_INFO("sigmaDiff = %f", sigmaDiff[0]);
     estimateErrorCovariance_.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());
   }
+  estimateErrorCovariance_ = estimateErrorCovariance_ + process_noise_m;
 
 /*
   printf("---sigmaDiff---\n");
@@ -913,7 +935,7 @@ int main(int argc, char **argv)
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone2/mavros/imu/data", 10, imu_cb);
   ros::Publisher filtered_pub = nh.advertise<nav_msgs::Odometry>("/filtered/odom",10);
   initialize();
-  ros::Rate rate(10);
+  ros::Rate rate(50);
   while(ros::ok()){
     filterd.header.stamp = ros::Time::now();
     //imu_data.header.stamp = ros::Time::now();
@@ -924,7 +946,7 @@ int main(int argc, char **argv)
     if(flag ==1)
     {
     writeInMeasurement();
-    predict(1,0.1);
+    predict(1,0.02);
     correct();
     }
 
