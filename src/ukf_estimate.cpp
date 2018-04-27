@@ -344,21 +344,21 @@ void correct(){
   size_t updateSize = 18 ;
 
   // Now set up the relevant matrices
-  Eigen::VectorXd stateSubset(updateSize);                              // x (in most literature)
+  //Eigen::VectorXd stateSubset(updateSize);                              // x (in most literature)
   Eigen::VectorXd measurementSubset(STATE_SIZE);                        // y
   Eigen::MatrixXd measurementCovarianceSubset(STATE_SIZE, STATE_SIZE);  // Py
   Eigen::MatrixXd stateToMeasurementSubset(STATE_SIZE, STATE_SIZE);     // H
-  Eigen::MatrixXd kalmanGainSubset(STATE_SIZE, updateSize);             // K
-  Eigen::VectorXd innovationSubset(updateSize);                         // y - Hx
-  Eigen::VectorXd predictedMeasurement(updateSize);
-  Eigen::VectorXd sigmaDiff(updateSize);
+  Eigen::MatrixXd kalmanGainSubset(STATE_SIZE, STATE_SIZE);             // K
+  Eigen::VectorXd innovationSubset(STATE_SIZE);                         // y - Hx
+  Eigen::VectorXd predictedMeasurement(STATE_SIZE);
+  Eigen::VectorXd sigmaDiff(STATE_SIZE);
   Eigen::MatrixXd predictedMeasCovar(STATE_SIZE, STATE_SIZE);
-  Eigen::MatrixXd crossCovar(STATE_SIZE, updateSize);
+  Eigen::MatrixXd crossCovar(STATE_SIZE, STATE_SIZE);
 
-  std::vector<Eigen::VectorXd> sigmaPointMeasurements(sigmaPoints_.size(), Eigen::VectorXd(updateSize));
+  std::vector<Eigen::VectorXd> sigmaPointMeasurements(sigmaPoints_.size(), Eigen::VectorXd(STATE_SIZE));
 
 
-  stateSubset.setZero();
+  //stateSubset.setZero();
   measurementSubset.setZero();
   measurementCovarianceSubset.setZero();
   stateToMeasurementSubset.setZero();
