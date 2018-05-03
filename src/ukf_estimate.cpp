@@ -276,6 +276,53 @@ void writeInMeasurement(){
   imu_data.linear_acceleration.z = 9.9 - 9.8;
   test*/
   measurement.measurement_.resize(18);
+  float roll, pitch , yaw;
+  Eigen::Matrix3f Rx, Ry, Rz;
+  Eigen::Vector3f a_g_inertial;
+  Eigen::Vector3f a_g_body;
+  Rx.setZero();
+  Ry.setZero();
+  Rz.setZero();
+  a_g_inertial.setZero();
+
+  a_g_inertial(0) = 0;
+  a_g_inertial(1) = 0;
+  a_g_inertial(2) = 9.8;
+  roll = state_[StateMemberRoll];
+  pitch = state_[StateMemberPitch];
+  yaw = state_[StateMemberYaw];
+  Rx(0,0) = 1;
+  Rx(1,0) = 0;
+  Rx(2,0) = 0;
+  Rx(0,1) = 0;
+  Rx(1,1) = cos(roll);
+  Rx(1,2) = -sin(roll);
+  Rx(2,0) = 0;
+  Rx(2,1) = sin(roll);
+  Rx(2,2) = cos(roll);
+
+  Ry(0,0) = cos(pitch);
+  Ry(1,0) = 0;
+  Ry(2,0) = sin(pitch);
+  Ry(0,1) = 0;
+  Ry(1,1) = 1;
+  Ry(1,2) = 0;
+  Ry(2,0) = -sin(pitch);
+  Ry(2,1) = 0;
+  Ry(2,2) = cos(pitch);
+
+  Rz(0,0) = cos(yaw);
+  Rz(1,0) = -sin(yaw);
+  Rz(2,0) = 0;
+  Rz(0,1) = sin(yaw);
+  Rz(1,1) = cos(yaw);
+  Rz(1,2) = 0;
+  Rz(2,0) = 0;
+  Rz(2,1) = 0;
+  Rz(2,2) = 1;
+
+  a_g_body = Ry*Rz*Rx*a_g_inertial;
+  a_g_body(0) = (sin(yaw)*sin(roll) + cos(yaw)*sin(pitch)*cos(roll)) * 9.8;
 
   measurement.measurement_[StateMemberX] = svo_pose.pose.pose.position.x ;
   measurement.measurement_[StateMemberY] = svo_pose.pose.pose.position.y ;
@@ -287,9 +334,9 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberZ] = 0 ;
 */
 
-  measurement.measurement_[StateMemberAx] = -imu_data.linear_acceleration.x ;
-  measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y ;
-  measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - 9.8);
+  measurement.measurement_[StateMemberAx] = -imu_data.linear_acceleration.x - a_g_body(0);
+  measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y + a_g_body(1);
+  measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - a_g_body(2));
 
   /*
   measurement.measurement_[StateMemberAx] = 0 ;
@@ -313,7 +360,7 @@ void writeInMeasurement(){
 }
 
 void correct(){
-  ROS_INFO("---correct start---\n");
+  //ROS_INFO("---correct start---\n");
 
   const int STATE_SIZE = 18;
   const double PI = 3.141592653589793;
@@ -500,7 +547,7 @@ void correct(){
   }
   printf("\n");
   */
-
+/*
   printf("---P_y_k~_y_k_~---\n");
   for(int i = 0; i < 18; i++){
     for(int j = 0 ; j < 18; j++){
@@ -519,7 +566,7 @@ void correct(){
     printf("\n");
   }
   printf("\n");
-
+*/
   //ROS_INFO("sigmaPointMeasurements = %f", sigmaPointMeasurements[0][0]);
   //ROS_INFO("predictedMeasCovar = %f", predictedMeasCovar(0,0));
   //ROS_INFO("sigmadiff = %f", sigmaDiff(0,0));
@@ -542,6 +589,7 @@ void correct(){
     }
   }
 */
+  /*
   printf("---kalmanGain---\n");
   for(int i = 0;i<18;i++){
     for(int j = 0; j < 18; j++){
@@ -551,7 +599,7 @@ void correct(){
   }
   printf("\n");
 
-
+*/
   // (8) Apply the gain to the difference between the actual and predicted measurements: x = x + K(y - y_hat)
   // y - y_hat
   //ROS_INFO("measure = %f",measurementSubset[0]);
@@ -563,13 +611,13 @@ void correct(){
   //Eigen::MatrixXd test = kalmanGainSubset * innovationSubset;
   //ROS_INFO("%f", test(0,0));
   //ROS_INFO("state = %f", state_[0]);
-
+/*
   printf("---(y-y_hat)---\n");
   for(int i = 0; i < 18; i++){
     printf("%f ", innovationSubset[i]);
   }
   printf("\n");
-
+*/
   // Wrap angles in the innovation
   while (innovationSubset(StateMemberRoll) < -PI)
    {
@@ -648,12 +696,12 @@ void correct(){
     // Mark that we need to re-compute sigma points for successive corrections
     uncorrected_ = false;
     measurement.mahalanobisThresh_ = 2;
-    ROS_INFO("---correct success!!---\n");
+    //ROS_INFO("---correct success!!---\n");
 
   }
   else{
     measurement.mahalanobisThresh_ = 8;
-    ROS_INFO("---correct fail!!---\n");
+    //ROS_INFO("---correct fail!!---\n");
   }
   //ROS_INFO("thrshold = %f", measurement.mahalanobisThresh_);
 
@@ -661,7 +709,7 @@ void correct(){
 
 void predict(const double referenceTime, const double delta)
 {
-  ROS_INFO("---Predict start---");
+  //ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(18,18);
   Eigen::MatrixXd process_noise_m(18,18);
   double m = 1;
@@ -922,7 +970,7 @@ printf("\n");
 // Mark that we can keep these sigma points
       uncorrected_ = true;
       //ROS_INFO("Vx = %f, Vy = %f, Vz = %f", state_[6], state_[7], state_[8]);
-      ROS_INFO("---Predict end---");
+      //ROS_INFO("---Predict end---");
 
 }
 
