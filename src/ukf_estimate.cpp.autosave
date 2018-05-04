@@ -356,6 +356,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAx] = -imu_data.linear_acceleration.x - a_g_body(0);
   measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y + a_g_body(1);
   measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - a_g_body(2));
+  
   /*
   measurement.measurement_[StateMemberAx] = 0 ;
   measurement.measurement_[StateMemberAy] = 0 ;
