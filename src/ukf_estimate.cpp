@@ -249,7 +249,7 @@ void quaternionToRPY(){
 
   //ROS_INFO("flag = %d", flag);
   //ROS_INFO("imu = %f", imu_data.orientation.w);
-  tf::Quaternion quat(mocap_pose.pose.orientation.x, mocap_pose.pose.orientation.y, mocap_pose.pose.orientation.z, imu_data.orientation.w);
+  tf::Quaternion quat(mocap_pose.pose.orientation.x, mocap_pose.pose.orientation.y, mocap_pose.pose.orientation.z, mocap_pose.pose.orientation.w);
   double roll, pitch, yaw;
   tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
 
