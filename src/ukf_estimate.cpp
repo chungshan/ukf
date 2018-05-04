@@ -356,6 +356,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAx] = -imu_data.linear_acceleration.x - a_g_body(0);
   measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y + a_g_body(1);
   measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - a_g_body(2));
+
   /*
   measurement.measurement_[StateMemberAx] = 0 ;
   measurement.measurement_[StateMemberAy] = 0 ;
@@ -998,7 +999,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "ukf_estimate");
   ros::NodeHandle nh;
   ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
-  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_ros/RigidyBody2/pose", 10, mocap_cb);
+  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 10, mocap_cb);
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone2/mavros/imu/data", 10, imu_cb);
   ros::Publisher filtered_pub = nh.advertise<nav_msgs::Odometry>("/filtered/odom",10);
   initialize();
