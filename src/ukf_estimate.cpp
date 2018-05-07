@@ -50,6 +50,7 @@ double lambda_;
 bool uncorrected_;
 int flag;
 int flag2;
+float imu_pitch, imu_yaw, imu_roll;
 /*test variable*/
 
 
@@ -243,7 +244,7 @@ void quaternionToRPY(){
   //ROS_INFO("flag = %d", flag);
   //ROS_INFO("imu = %f", imu_data.orientation.w);
   tf::Quaternion quat(imu_data.orientation.x, imu_data.orientation.y, imu_data.orientation.z, imu_data.orientation.w);
-  /*
+
   if(mocap_pose.pose.orientation.w == 0)
   {
     mocap_pose.pose.orientation.w = 1;
@@ -255,19 +256,30 @@ void quaternionToRPY(){
 
   //ROS_INFO("flag = %d", flag);
   //ROS_INFO("imu = %f", imu_data.orientation.w);
-  tf::Quaternion quat(mocap_pose.pose.orientation.x, mocap_pose.pose.orientation.y, mocap_pose.pose.orientation.z, mocap_pose.pose.orientation.w);
-  */
+  tf::Quaternion quat1(mocap_pose.pose.orientation.x, mocap_pose.pose.orientation.y, mocap_pose.pose.orientation.z, mocap_pose.pose.orientation.w);
+
   double roll, pitch, yaw;
+  double roll_mocap, pitch_mocap, yaw_mocap;
   tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+  tf::Matrix3x3(quat1).getRPY(roll_mocap, pitch_mocap, yaw_mocap);
 
   geometry_msgs::Vector3 rpy;
+  geometry_msgs::Vector3 rpy_mocap;
   rpy.x = roll;
   rpy.y = pitch;
   rpy.z = yaw;
 
-  state_[StateMemberRoll] = rpy.x;
-  state_[StateMemberPitch] = rpy.y;
-  state_[StateMemberYaw] = rpy.z;
+  rpy_mocap.x = roll_mocap;
+  rpy_mocap.y = pitch_mocap;
+  rpy_mocap.z = yaw_mocap;
+
+  imu_roll = rpy.x;
+  imu_pitch = rpy.y;
+  imu_yaw = rpy.z;
+
+  state_[StateMemberRoll] = rpy_mocap.x;
+  state_[StateMemberPitch] = rpy_mocap.y;
+  state_[StateMemberYaw] = rpy_mocap.z;
 
   /*
   state_[StateMemberRoll] = 0;
@@ -314,9 +326,9 @@ void writeInMeasurement(){
   a_g_inertial(0) = 0;
   a_g_inertial(1) = 0;
   a_g_inertial(2) = 9.81;
-  roll = state_[StateMemberRoll];
-  pitch = state_[StateMemberPitch];
-  yaw = state_[StateMemberYaw];
+  roll = imu_roll;
+  pitch = imu_pitch;
+  yaw = imu_yaw;
   Rx(0,0) = 1;
   Rx(1,0) = 0;
   Rx(2,0) = 0;
@@ -474,6 +486,7 @@ void correct(){
   stateToMeasurementSubset(15,15) = 0;
   stateToMeasurementSubset(16,16) = 0;
   stateToMeasurementSubset(17,17) = 0;
+  stateToMeasurementSubset(18,18) = 0;
 
   //The measurecovariance subset R
 
@@ -483,6 +496,7 @@ void correct(){
   measurementCovarianceSubset(12,12) = 0.2;
   measurementCovarianceSubset(13,13) = 0.2;
   measurementCovarianceSubset(14,14) = 0.2;
+  measurementCovarianceSubset(18,18) = 0.2;
   measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 0.4;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
@@ -845,6 +859,8 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(15,15) = 0.01;
   process_noise_m(16,16) = 0.01;
   process_noise_m(17,17) = 0.01;
+  process_noise_m(18,18) = 0.01;
+
    //print transfer function
  /*
   printf("---transfer function---\n");
