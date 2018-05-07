@@ -224,7 +224,7 @@ void quaternionToRPY(){
   imu_data.orientation.y = 0.05;
   imu_data.orientation.z = 0.1;
   imu_data.orientation.w = 1;*/
-  /* imu orientation
+   //imu orientation
   if(imu_data.orientation.w == 0)
   {
     imu_data.orientation.w = 1;
@@ -237,7 +237,7 @@ void quaternionToRPY(){
   //ROS_INFO("flag = %d", flag);
   //ROS_INFO("imu = %f", imu_data.orientation.w);
   tf::Quaternion quat(imu_data.orientation.x, imu_data.orientation.y, imu_data.orientation.z, imu_data.orientation.w);
-  */
+  /*
   if(mocap_pose.pose.orientation.w == 0)
   {
     mocap_pose.pose.orientation.w = 1;
@@ -250,6 +250,7 @@ void quaternionToRPY(){
   //ROS_INFO("flag = %d", flag);
   //ROS_INFO("imu = %f", imu_data.orientation.w);
   tf::Quaternion quat(mocap_pose.pose.orientation.x, mocap_pose.pose.orientation.y, mocap_pose.pose.orientation.z, mocap_pose.pose.orientation.w);
+  */
   double roll, pitch, yaw;
   tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
 
@@ -306,7 +307,7 @@ void writeInMeasurement(){
 
   a_g_inertial(0) = 0;
   a_g_inertial(1) = 0;
-  a_g_inertial(2) = 9.8;
+  a_g_inertial(2) = 9.81;
   roll = state_[StateMemberRoll];
   pitch = state_[StateMemberPitch];
   yaw = state_[StateMemberYaw];
@@ -343,9 +344,9 @@ void writeInMeasurement(){
   a_g_body = Ry*Rz*Rx*a_g_inertial;
   a_g_body(0) = (sin(yaw)*sin(roll) + cos(yaw)*sin(pitch)*cos(roll)) * 9.8;
 
-  measurement.measurement_[StateMemberX] = svo_pose.pose.pose.position.x ;
-  measurement.measurement_[StateMemberY] = svo_pose.pose.pose.position.y ;
-  measurement.measurement_[StateMemberZ] = svo_pose.pose.pose.position.z ;
+  measurement.measurement_[StateMemberX] = mocap_pose.pose.position.x ;
+  measurement.measurement_[StateMemberY] = mocap_pose.pose.position.y ;
+  measurement.measurement_[StateMemberZ] = mocap_pose.pose.position.z ;
 
 /*
   measurement.measurement_[StateMemberX] = 0 ;
