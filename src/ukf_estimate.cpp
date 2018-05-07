@@ -5,10 +5,12 @@
 #include <eigen3/Eigen/Dense>
 #include <tf/transform_datatypes.h>
 #include <nav_msgs/Odometry.h>
+#include <mavros_msgs/VFR_HUD.h>
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 geometry_msgs::PoseStamped mocap_pose;
 sensor_msgs::Imu imu_data;
 nav_msgs::Odometry filterd;
+mavros_msgs::VFR_HUD vfr_data;
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
 }
@@ -21,6 +23,9 @@ void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
   imu_data = *msg;//test
 }
 
+void vfr_cb(const mavros_msgs::VFR_HUD::ConstPtr &msg){
+  vfr_data = *msg;//test
+}
 struct Measurement
 {
   // The measurement and its associated covariance
@@ -34,10 +39,10 @@ struct Measurement
 Measurement measurement;
 
 // Global variable
-Eigen::VectorXd state_(18); //x
-Eigen::MatrixXd weightedCovarSqrt_(18,18); // square root of (L+lamda)*P_k-1
-Eigen::MatrixXd estimateErrorCovariance_(18,18); // P_k-1
-Eigen::VectorXd process_noise(18);
+Eigen::VectorXd state_(19); //x
+Eigen::MatrixXd weightedCovarSqrt_(19,19); // square root of (L+lamda)*P_k-1
+Eigen::MatrixXd estimateErrorCovariance_(19,19); // P_k-1
+Eigen::VectorXd process_noise(19);
 std::vector<Eigen::VectorXd> sigmaPoints_;
 std::vector<double> stateWeights_;
 std::vector<double> covarWeights_;
@@ -69,7 +74,8 @@ enum StateMembers
   StateMemberAz,
   StateMemberFx,
   StateMemberFy,
-  StateMemberFz
+  StateMemberFz,
+  StateMemberThrust
 };
 
 bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
@@ -102,8 +108,8 @@ void initialize(){
   double alpha = 1e-3;
   double kappa = 0;
   double beta = 2;
-  const int STATE_SIZE = 18;
-  float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 37(18 states)
+  const int STATE_SIZE = 19;
+  float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 37(19 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
 
   //Prepare constants
@@ -164,7 +170,7 @@ void initialize(){
   estimateErrorCovariance_(17,17) = 1e-06;//Fz
 /*
   //process noise
-  for(int i = 0; i < 18; i++){
+  for(int i = 0; i < 19; i++){
     process_noise[i] = 0.0001;
   }
 
@@ -179,8 +185,8 @@ void initialize(){
 
 
 /*
-  for (int i = 0; i < 18; i++){
-    for (int j = 0; j < 18; j++){
+  for (int i = 0; i < 19; i++){
+    for (int j = 0; j < 19; j++){
 
         printf("%.3f ", estimateErrorCovariance_(i,j));
 
@@ -279,7 +285,7 @@ void quaternionToRPY(){
 */
   //ROS_INFO("roll = %f, pitch = %f, yaw = %f", state_[StateMemberRoll],state_[StateMemberPitch],state_[StateMemberYaw]);
 /*
-  for (int i = 0; i < 18; i++){
+  for (int i = 0; i < 19; i++){
   printf("%f ", state_[i]);
   }
   printf("\n");
@@ -295,7 +301,7 @@ void writeInMeasurement(){
   imu_data.linear_acceleration.y = 0.0;
   imu_data.linear_acceleration.z = 9.9 - 9.8;
   test*/
-  measurement.measurement_.resize(18);
+  measurement.measurement_.resize(19);
   float roll, pitch , yaw;
   Eigen::Matrix3f Rx, Ry, Rz;
   Eigen::Vector3f a_g_inertial;
@@ -341,9 +347,9 @@ void writeInMeasurement(){
   Rz(2,1) = 0;
   Rz(2,2) = 1;
 
-  a_g_body = Ry*Rz*Rx*a_g_inertial;
-  a_g_body(0) = (sin(yaw)*sin(roll) + cos(yaw)*sin(pitch)*cos(roll)) * 9.8;
-
+  a_g_body = Ry*Rx*Rz*a_g_inertial;
+  //a_g_body(0) = (sin(yaw)*sin(roll) + cos(yaw)*sin(pitch)*cos(roll)) * 9.8;
+  a_g_body(0) = sin(pitch)*cos(roll)*9.8;
   measurement.measurement_[StateMemberX] = mocap_pose.pose.position.x ;
   measurement.measurement_[StateMemberY] = mocap_pose.pose.position.y ;
   measurement.measurement_[StateMemberZ] = mocap_pose.pose.position.z ;
@@ -354,22 +360,25 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberZ] = 0 ;
 */
 
-  measurement.measurement_[StateMemberAx] = -imu_data.linear_acceleration.x - a_g_body(0);
-  measurement.measurement_[StateMemberAy] = imu_data.linear_acceleration.y + a_g_body(1);
-  measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - a_g_body(2));
+  measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x + a_g_body(0));
+  measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y + a_g_body(1));
+  measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
 
   /*
   measurement.measurement_[StateMemberAx] = 0 ;
   measurement.measurement_[StateMemberAy] = 0 ;
   measurement.measurement_[StateMemberAz] = 0 ;
 */
+
+  measurement.measurement_[StateMemberThrust] = vfr_data.throttle;
+
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
   state_[StateMemberFz] = 0;
 
   //ROS_INFO("ax = %f", measurement.measurement_[StateMemberAz]);
   /*printf measurement_[i]
-  for (int i = 0; i < 18 ; i++)
+  for (int i = 0; i < 19 ; i++)
   {
     printf("%f ",measurement.measurement_[i]);
   }
@@ -382,9 +391,9 @@ void writeInMeasurement(){
 void correct(){
   //ROS_INFO("---correct start---\n");
 
-  const int STATE_SIZE = 18;
+  const int STATE_SIZE = 19;
   const double PI = 3.141592653589793;
-  const double TAU = 6.283185307179587;
+  const double TAU = 6.283195307179587;
 
   //correct, calculate sigma points, if uncorrected = true ,than this loop won't be run.
   if (!uncorrected_)
@@ -409,7 +418,7 @@ void correct(){
 
   // First, determine how many state vector values we're updating
 
-  size_t updateSize = 18 ;
+  size_t updateSize = 19 ;
 
   // Now set up the relevant matrices
   //Eigen::VectorXd stateSubset(updateSize);                              // x (in most literature)
@@ -486,7 +495,7 @@ void correct(){
 /*
   printf("---sigma_Measurements---\n");
   for(int i = 0; i < 37; i++){
-    for(int j = 0; j < 18; j++){
+    for(int j = 0; j < 19; j++){
       printf("%f ", sigmaPointMeasurements[i][j]);
     }
     printf("\n");
@@ -495,7 +504,7 @@ void correct(){
 */
 /*
   printf("---y_k_hat----\n");
-  for(int i = 0; i < 18; i++){
+  for(int i = 0; i < 19; i++){
     printf("%f ", predictedMeasurement[i]);
 
   }
@@ -515,8 +524,8 @@ void correct(){
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
   {
     crossCovar1 = ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());
-    for(int i = 0; i < 18; i++){
-      for(int j = 0 ; j < 18; j++){
+    for(int i = 0; i < 19; i++){
+      for(int j = 0 ; j < 19; j++){
         printf("%f \n", crossCovar(i,j));
       }
       printf("---next crossCovar---\n");
@@ -525,52 +534,73 @@ void correct(){
   }
 */
   //check p_y_k~_y_k_~ value
-  for (int i = 3; i < 18 ; i++){
+  for (int i = 3; i < 19 ; i++){
     for (int j = 0; j < 12 ; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
   for (int i = 0; i < 3;i++){
-    for (int j =3; j < 18 ; j++){
+    for (int j =3; j < 19 ; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
   for (int i = 12 ; i < 15 ; i++){
-    for(int j = 15 ; j < 18; j++){
+    for(int j = 15 ; j < 19; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 12; i < 18; i++){
-    for(int j = 15; j < 18; j++){
+  for (int i = 12; i < 19; i++){
+    for(int j = 15; j < 19; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 15; i < 18; i++){
+  for (int i = 15; i < 19; i++){
     for (int j = 12; j < 15;j++)
       predictedMeasCovar(i,j) = 0;
   }
+  //Thrust
+
+    for(int j = 3; j < 13;j++){
+      predictedMeasCovar(18,j) = 0;
+    }
+
+
+    for(int j = 15; j < 19;j++){
+      predictedMeasCovar(18,j) = 0;
+    }
+
+
+    for(int i = 3; i < 13;i++){
+      predictedMeasCovar(i,18) = 0;
+    }
+
+
+    for(int i = 15; i < 19;i++){
+      predictedMeasCovar(i,18) = 0;
+    }
+
   //check P_x_k_y_k value
-  for(int i = 0; i < 18; i++){
+  for(int i = 0; i < 19; i++){
     for(int j = 3; j < 12; j++){
       crossCovar(i,j) = 0;
     }
   }
-  for(int i = 0; i < 18; i++){
+  for(int i = 0; i < 19; i++){
     for(int j = 15; j < 18; j++){
       crossCovar(i,j) = 0;
     }
   }
 /*
   printf("---sigmaDiff of y---\n");
-  for(int i = 0; i < 18; i++){
+  for(int i = 0; i < 19; i++){
     printf("%f ", sigmaDiff[i]);
   }
   printf("\n");
   */
 /*
   printf("---P_y_k~_y_k_~---\n");
-  for(int i = 0; i < 18; i++){
-    for(int j = 0 ; j < 18; j++){
+  for(int i = 0; i < 19; i++){
+    for(int j = 0 ; j < 19; j++){
       printf("%f ", predictedMeasCovar(i,j));
     }
     printf("\n");
@@ -579,8 +609,8 @@ void correct(){
 
 
   printf("---P_x_k_y_k---\n");
-  for(int i = 0; i < 18; i++){
-    for(int j = 0 ; j < 18; j++){
+  for(int i = 0; i < 19; i++){
+    for(int j = 0 ; j < 19; j++){
       printf("%f ", crossCovar(i,j));
     }
     printf("\n");
@@ -600,7 +630,7 @@ void correct(){
   kalmanGainSubset = crossCovar * invInnovCov;
   //ROS_INFO("kalmanGain = %f", kalmanGainSubset(5,5));
 /*
-  for(int i = 0;i < 18; i ++){
+  for(int i = 0;i < 19; i ++){
     for(int j = 12; j < 15; j++){
       if(kalmanGainSubset(i,j) > 0.1)
         kalmanGainSubset(i,j) = 0.1;
@@ -611,8 +641,8 @@ void correct(){
 */
   /*
   printf("---kalmanGain---\n");
-  for(int i = 0;i<18;i++){
-    for(int j = 0; j < 18; j++){
+  for(int i = 0;i<19;i++){
+    for(int j = 0; j < 19; j++){
       printf("%f ", kalmanGainSubset(i,j));
     }
     printf("\n");
@@ -633,7 +663,7 @@ void correct(){
   //ROS_INFO("state = %f", state_[0]);
 /*
   printf("---(y-y_hat)---\n");
-  for(int i = 0; i < 18; i++){
+  for(int i = 0; i < 19; i++){
     printf("%f ", innovationSubset[i]);
   }
   printf("\n");
@@ -700,8 +730,8 @@ void correct(){
     //ROS_INFO("predictedMeas = %f", predictedMeasCovar(0,0));
 /*
     printf("---estimateErrorCov---\n");
-    for(int i = 0; i < 18; i++){
-      for(int j = 0; j < 18; j++){
+    for(int i = 0; i < 19; i++){
+      for(int j = 0; j < 19; j++){
         printf("%f ", estimateErrorCovariance_(i,j));
       }
       printf("\n");
@@ -730,10 +760,10 @@ void correct(){
 void predict(const double referenceTime, const double delta)
 {
   //ROS_INFO("---Predict start---");
-  Eigen::MatrixXd transferFunction_(18,18);
-  Eigen::MatrixXd process_noise_m(18,18);
-  double m = 1;
-  const int STATE_SIZE = 18;
+  Eigen::MatrixXd transferFunction_(19,19);
+  Eigen::MatrixXd process_noise_m(19,19);
+  double m = 0.8;
+  const int STATE_SIZE = 19;
 
 
 
@@ -751,8 +781,8 @@ void predict(const double referenceTime, const double delta)
   double sy = ::sin(yaw);
   double cy = ::cos(yaw);
   //ROS_INFO("sp = %f, cp = %f, sy = %f", sp , cp, sy);
-  // Prepare the transfer function
-  transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = 1;
+  // Prepare the transfer function Rz*Ry*Rx
+  transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = transferFunction_(15,15) = transferFunction_(16,16) = transferFunction_(17,17) = transferFunction_(18,18) = 1;
   transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
   transferFunction_(StateMemberX, StateMemberVy) = (cy * sp * sr - sy * cr) * delta;
   transferFunction_(StateMemberX, StateMemberVz) = (cy * sp * cr + sy * sr) * delta;
@@ -783,15 +813,19 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberVx, StateMemberAx) = delta;
   transferFunction_(StateMemberVy, StateMemberAy) = delta;
   transferFunction_(StateMemberVz, StateMemberAz) = delta;
-  transferFunction_(StateMemberFx,StateMemberAx) = m*cy * cp;
-  transferFunction_(StateMemberFx,StateMemberAy) = m*(cy * sp * sr - sy * cr);
-  transferFunction_(StateMemberFx,StateMemberAz) = m*(cy * sp * cr + sy * sr);
-  transferFunction_(StateMemberFy,StateMemberAx) = m*sy * cp;
-  transferFunction_(StateMemberFy,StateMemberAy) = m*(sy * sp * sr + cy * cr);
-  transferFunction_(StateMemberFy,StateMemberAz) = m*(sy * sp * cr - cy * sr);
-  transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
-  transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
-  transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr ;
+  transferFunction_(StateMemberFx,StateMemberAx) = m;//*cy * cp;
+  //transferFunction_(StateMemberFx,StateMemberAy) = m;//*(cy * sp * sr - sy * cr);
+  //transferFunction_(StateMemberFx,StateMemberAz) = m;//*(cy * sp * cr + sy * sr);
+  //transferFunction_(StateMemberFy,StateMemberAx) = m*sy * cp;
+  transferFunction_(StateMemberFy,StateMemberAy) = m;//*(sy * sp * sr + cy * cr);
+  //transferFunction_(StateMemberFy,StateMemberAz) = m*(sy * sp * cr - cy * sr);
+  //transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
+  //transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
+  transferFunction_(StateMemberFz,StateMemberAz) = m;//*cp * cr ;
+  transferFunction_(StateMemberFz,StateMemberThrust) = -1;
+  transferFunction_(StateMemberFx,StateMemberVx) = 0.01;
+  transferFunction_(StateMemberFy,StateMemberVy) = 0.01;
+  transferFunction_(StateMemberFz,StateMemberVz) = 0.01;
 
   process_noise_m(0,0) = 0.05;
   process_noise_m(1,1) = 0.05;
@@ -814,8 +848,8 @@ void predict(const double referenceTime, const double delta)
    //print transfer function
  /*
   printf("---transfer function---\n");
-  for (int i = 0;i < 18; i++){
-    for (int j = 0; j < 18; j++){
+  for (int i = 0;i < 19; i++){
+    for (int j = 0; j < 19; j++){
       printf("%f ", transferFunction_(i,j));
     }
     printf("\n");
@@ -824,23 +858,23 @@ void predict(const double referenceTime, const double delta)
 */
   // (1) Take the square root of a small fraction of the estimateErrorCovariance_ using LL' decomposition
   // caculate square root of (L+lamda)*P_k-1
-  // This will be a diagonal matrix (18*18)
+  // This will be a diagonal matrix (19*19)
 
   weightedCovarSqrt_ = ((STATE_SIZE + lambda_) * estimateErrorCovariance_).llt().matrixL();
   /*
   Eigen::MatrixXd L = estimateErrorCovariance_.llt().matrixL();
   Eigen::MatrixXd L_ = L*L.transpose();
   printf("---L---\n");
-  for(int i = 0;i < 18;i++){
-    for(int j = 0 ; j<18;j++){
+  for(int i = 0;i < 19;i++){
+    for(int j = 0 ; j<19;j++){
       printf("%f ", L(i,j));
     }
     printf("\n");
   }
   printf("\n");
   printf("---L_---\n");
-  for(int i = 0;i < 18;i++){
-    for(int j = 0 ; j<18;j++){
+  for(int i = 0;i < 19;i++){
+    for(int j = 0 ; j<19;j++){
       printf("%f ", L_(i,j));
     }
     printf("\n");
@@ -851,8 +885,8 @@ void predict(const double referenceTime, const double delta)
  // printf weightedCovarSqrt
 /*
  printf("---weightedCovarSqrt---\n");
-  for (int i = 0; i < 18; i++){
-    for (int j = 0 ; j < 18; j++){
+  for (int i = 0; i < 19; i++){
+    for (int j = 0 ; j < 19; j++){
       printf("%f ", weightedCovarSqrt_(i,j));
     }
     printf("\n");
@@ -869,14 +903,14 @@ void predict(const double referenceTime, const double delta)
   sigmaPoints_[0] = transferFunction_ * state_;
   //ROS_INFO("%f", sigmaPoints_[0][0]);
 /*
-  for (int j = 0; j < 18; j++){
+  for (int j = 0; j < 19; j++){
     printf("%f ", sigmaPoints_[0][j]);
   }
   printf("\n");
 */
 /*
   printf("---state---\n");
-  for (int i = 0; i < 18; i++){
+  for (int i = 0; i < 19; i++){
     printf("%f ", state_[i]);
   }
   printf("\n");
@@ -898,7 +932,7 @@ void predict(const double referenceTime, const double delta)
 /*
 printf("---sigmaPoints---\n");
   for (int i = 0; i < 37 ; i++){
-    for (int j = 0; j< 18 ; j++){
+    for (int j = 0; j< 19 ; j++){
       printf("%f ", sigmaPoints_[i][j]);
     }
     printf("\n");
@@ -916,7 +950,7 @@ printf("\n");
   /*
   printf("---state before adding noise---\n");
 
-    for (int i = 0; i < 18; i++){
+    for (int i = 0; i < 19; i++){
       printf("%f ", state_[i]);
     }
     printf("\n");
@@ -928,7 +962,7 @@ printf("\n");
 /*
   printf("---state adding noise---\n");
 
-    for (int i = 0; i < 18; i++){
+    for (int i = 0; i < 19; i++){
       printf("%f ", state_[i]);
     }
     printf("\n");
@@ -937,8 +971,8 @@ printf("\n");
 
 /*
   ROS_INFO("initial covariance");
-  for (int i = 0; i < 18; i++){
-    for (int j = 0 ; j<18; j++){
+  for (int i = 0; i < 19; i++){
+    for (int j = 0 ; j<19; j++){
       printf("%f ", estimateErrorCovariance_(i,j));
     }
     printf("\n");
@@ -949,13 +983,13 @@ printf("\n");
   estimateErrorCovariance_.setZero();
  /*
   printf("---sigmaPoints---\n");
-  for (int j = 0; j < 18; j++){
+  for (int j = 0; j < 19; j++){
     printf("%f ", sigmaPoints_[30][j]);
 
   }
   printf("\n");
   printf("---state_---\n");
-  for (int j = 0; j < 18; j++){
+  for (int j = 0; j < 19; j++){
     printf("%f ", state_[j]);
   }
   printf("\n");
@@ -972,15 +1006,15 @@ printf("\n");
 
 /*
   printf("---sigmaDiff---\n");
-  for(int i = 0; i < 18; i++){
+  for(int i = 0; i < 19; i++){
       printf("%f ", sigmaDiff[i]);
   }
 */
   //ROS_INFO("estimateErrorCov = %f", estimateErrorCovariance_(0,0));
 /*
   printf("---predicted estimate covariance---\n");
-  for (int i = 0; i < 18; i++){
-    for (int j = 0 ; j<18; j++){
+  for (int i = 0; i < 19; i++){
+    for (int j = 0 ; j<19; j++){
       printf("%f ", estimateErrorCovariance_(i,j));
     }
     printf("\n");
@@ -1002,6 +1036,7 @@ int main(int argc, char **argv)
   ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
   ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 10, mocap_cb);
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone2/mavros/imu/data", 10, imu_cb);
+  ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>("/drone2/mavros/vfr_hud", 10, vfr_cb);
   ros::Publisher filtered_pub = nh.advertise<nav_msgs::Odometry>("/filtered/odom",10);
   initialize();
   ros::Rate rate(50);
