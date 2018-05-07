@@ -370,12 +370,12 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  measurement.measurement_[StateMemberThrust] = vfr_data.throttle;
-
+  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.5)*3*9.81 + 0.6*9.81;
+/*
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
   state_[StateMemberFz] = 0;
-
+*/
   //ROS_INFO("ax = %f", measurement.measurement_[StateMemberAz]);
   /*printf measurement_[i]
   for (int i = 0; i < 19 ; i++)
