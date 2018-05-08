@@ -169,7 +169,7 @@ void initialize(){
   estimateErrorCovariance_(15,15) = 1e-06;//Fx
   estimateErrorCovariance_(16,16) = 1e-06;//Fy
   estimateErrorCovariance_(17,17) = 1e-06;//Fz
-  estimateErrorCovariance_(18,18) = 1e-06;//Thrust
+  estimateErrorCovariance_(18,18) = 1e-02;//Thrust
 /*
   //process noise
   for(int i = 0; i < 19; i++){
@@ -200,6 +200,7 @@ void initialize(){
 
   // Initialize state by using first measurement x_0
   state_.setZero();
+  state_[StateMemberThrust] = 0.6*9.81;
 
   uncorrected_ = false;
 
@@ -487,7 +488,7 @@ void correct(){
   stateToMeasurementSubset(15,15) = 0;
   stateToMeasurementSubset(16,16) = 0;
   stateToMeasurementSubset(17,17) = 0;
-  stateToMeasurementSubset(18,18) = 0;
+  stateToMeasurementSubset(18,18) = 1;
 
   //The measurecovariance subset R
 
@@ -1065,10 +1066,10 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "ukf_estimate");
   ros::NodeHandle nh;
-  ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
-  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 10, mocap_cb);
-  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone2/mavros/imu/data", 10, imu_cb);
-  ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>("/drone2/mavros/vfr_hud", 10, vfr_cb);
+  //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
+  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 10, mocap_cb);
+  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone1/mavros/imu/data", 10, imu_cb);
+  ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>("/drone1/mavros/vfr_hud", 10, vfr_cb);
   ros::Publisher filtered_pub = nh.advertise<nav_msgs::Odometry>("/filtered/odom",10);
   initialize();
   ros::Rate rate(50);
