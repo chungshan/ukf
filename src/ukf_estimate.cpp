@@ -169,6 +169,7 @@ void initialize(){
   estimateErrorCovariance_(15,15) = 1e-06;//Fx
   estimateErrorCovariance_(16,16) = 1e-06;//Fy
   estimateErrorCovariance_(17,17) = 1e-06;//Fz
+  estimateErrorCovariance_(18,18) = 1e-06;//Thrust
 /*
   //process noise
   for(int i = 0; i < 19; i++){
@@ -797,6 +798,7 @@ void predict(const double referenceTime, const double delta)
   //ROS_INFO("sp = %f, cp = %f, sy = %f", sp , cp, sy);
   // Prepare the transfer function Rz*Ry*Rx
   transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = transferFunction_(15,15) = transferFunction_(16,16) = transferFunction_(17,17) = transferFunction_(18,18) = 1;
+  //X,Y,Z prediction
   transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
   transferFunction_(StateMemberX, StateMemberVy) = (cy * sp * sr - sy * cr) * delta;
   transferFunction_(StateMemberX, StateMemberVz) = (cy * sp * cr + sy * sr) * delta;
@@ -815,6 +817,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberZ, StateMemberAx) = 0.5 * transferFunction_(StateMemberZ, StateMemberVx) * delta;
   transferFunction_(StateMemberZ, StateMemberAy) = 0.5 * transferFunction_(StateMemberZ, StateMemberVy) * delta;
   transferFunction_(StateMemberZ, StateMemberAz) = 0.5 * transferFunction_(StateMemberZ, StateMemberVz) * delta;
+  //angle prediction
   transferFunction_(StateMemberRoll, StateMemberVroll) = transferFunction_(StateMemberX, StateMemberVx);
   transferFunction_(StateMemberRoll, StateMemberVpitch) = transferFunction_(StateMemberX, StateMemberVy);
   transferFunction_(StateMemberRoll, StateMemberVyaw) = transferFunction_(StateMemberX, StateMemberVz);
@@ -824,22 +827,35 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberYaw, StateMemberVroll) = transferFunction_(StateMemberZ, StateMemberVx);
   transferFunction_(StateMemberYaw, StateMemberVpitch) = transferFunction_(StateMemberZ, StateMemberVy);
   transferFunction_(StateMemberYaw, StateMemberVyaw) = transferFunction_(StateMemberZ, StateMemberVz);
+  //Velocity prediction
   transferFunction_(StateMemberVx, StateMemberAx) = delta;
   transferFunction_(StateMemberVy, StateMemberAy) = delta;
   transferFunction_(StateMemberVz, StateMemberAz) = delta;
-  transferFunction_(StateMemberFx,StateMemberAx) = m;//*cy * cp;
-  //transferFunction_(StateMemberFx,StateMemberAy) = m;//*(cy * sp * sr - sy * cr);
-  //transferFunction_(StateMemberFx,StateMemberAz) = m;//*(cy * sp * cr + sy * sr);
-  //transferFunction_(StateMemberFy,StateMemberAx) = m*sy * cp;
-  transferFunction_(StateMemberFy,StateMemberAy) = m;//*(sy * sp * sr + cy * cr);
-  //transferFunction_(StateMemberFy,StateMemberAz) = m*(sy * sp * cr - cy * sr);
-  //transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
-  //transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
-  transferFunction_(StateMemberFz,StateMemberAz) = m;//*cp * cr ;
-  transferFunction_(StateMemberFz,StateMemberThrust) = -1;
-  transferFunction_(StateMemberFx,StateMemberVx) = 0.01;
-  transferFunction_(StateMemberFy,StateMemberVy) = 0.01;
-  transferFunction_(StateMemberFz,StateMemberVz) = 0.01;
+  //Force prediction
+  transferFunction_(StateMemberFx,StateMemberAx) = m*cy * cp;
+  transferFunction_(StateMemberFx,StateMemberAy) = m*(cy * sp * sr - sy * cr);
+  transferFunction_(StateMemberFx,StateMemberAz) = m*(cy * sp * cr + sy * sr);
+  transferFunction_(StateMemberFy,StateMemberAx) = m*sy * cp;
+  transferFunction_(StateMemberFy,StateMemberAy) = m*(sy * sp * sr + cy * cr);
+  transferFunction_(StateMemberFy,StateMemberAz) = m*(sy * sp * cr - cy * sr);
+  transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
+  transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
+  transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr;
+  transferFunction_(StateMemberFx,StateMemberThrust) = -1*(cy * sp * cr + sy * sr);
+  transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
+  transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
+  transferFunction_(StateMemberFx,StateMemberVx) = 0.01*cy * cp;
+  transferFunction_(StateMemberFx,StateMemberVy) = 0.01*(cy * sp * sr - sy * cr);
+  transferFunction_(StateMemberFx,StateMemberVz) = 0.01*(cy * sp * cr + sy * sr);
+  transferFunction_(StateMemberFy,StateMemberVx) = 0.01*sy * cp ;
+  transferFunction_(StateMemberFy,StateMemberVy) = 0.01*(sy * sp * sr + cy * cr);
+  transferFunction_(StateMemberFy,StateMemberVz) = 0.01*(sy * sp * cr - cy * sr);
+  transferFunction_(StateMemberFz,StateMemberVx) = 0.01*(-sp) ;
+  transferFunction_(StateMemberFz,StateMemberVy) = 0.01*cp * sr;
+  transferFunction_(StateMemberFz,StateMemberVz) = 0.01*cp * cr;
+
+  state_[StateMemberFz] = state_[StateMemberFz] - m * 9.81;
+
 
   process_noise_m(0,0) = 0.05;
   process_noise_m(1,1) = 0.05;
