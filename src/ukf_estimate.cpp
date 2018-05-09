@@ -734,7 +734,8 @@ void correct(){
   {
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
-    ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
+    //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
+    ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
 
 
@@ -808,7 +809,7 @@ void predict(const double referenceTime, const double delta)
   double cy = ::cos(yaw);
   //ROS_INFO("sp = %f, cp = %f, sy = %f", sp , cp, sy);
   // Prepare the transfer function Rz*Ry*Rx
-  transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = transferFunction_(15,15) = transferFunction_(16,16) = transferFunction_(17,17) = transferFunction_(18,18) = 1;
+  transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = transferFunction_(18,18) = 1;
   //X,Y,Z prediction
   transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
   transferFunction_(StateMemberX, StateMemberVy) = (cy * sp * sr - sy * cr) * delta;
@@ -857,15 +858,15 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
   transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
   //drag force
-  transferFunction_(StateMemberFx,StateMemberVx) = 0.01*cy * cp;
-  transferFunction_(StateMemberFx,StateMemberVy) = 0.01*(cy * sp * sr - sy * cr);
-  transferFunction_(StateMemberFx,StateMemberVz) = 0.01*(cy * sp * cr + sy * sr);
-  transferFunction_(StateMemberFy,StateMemberVx) = 0.01*sy * cp ;
-  transferFunction_(StateMemberFy,StateMemberVy) = 0.01*(sy * sp * sr + cy * cr);
-  transferFunction_(StateMemberFy,StateMemberVz) = 0.01*(sy * sp * cr - cy * sr);
-  transferFunction_(StateMemberFz,StateMemberVx) = 0.01*(-sp) ;
-  transferFunction_(StateMemberFz,StateMemberVy) = 0.01*cp * sr;
-  transferFunction_(StateMemberFz,StateMemberVz) = 0.01*cp * cr;
+  transferFunction_(StateMemberFx,StateMemberVx) = 0.12*cy * cp;
+  transferFunction_(StateMemberFx,StateMemberVy) = 0.12*(cy * sp * sr - sy * cr);
+  transferFunction_(StateMemberFx,StateMemberVz) = 0.12*(cy * sp * cr + sy * sr);
+  transferFunction_(StateMemberFy,StateMemberVx) = 0.12*sy * cp ;
+  transferFunction_(StateMemberFy,StateMemberVy) = 0.12*(sy * sp * sr + cy * cr);
+  transferFunction_(StateMemberFy,StateMemberVz) = 0.12*(sy * sp * cr - cy * sr);
+  transferFunction_(StateMemberFz,StateMemberVx) = 0.12*(-sp) ;
+  transferFunction_(StateMemberFz,StateMemberVy) = 0.12*cp * sr;
+  transferFunction_(StateMemberFz,StateMemberVz) = 0.12*cp * cr;
 
   state_[StateMemberFz] = state_[StateMemberFz] - m * 9.81;
 
@@ -1001,9 +1002,11 @@ printf("\n");
     printf("\n");
 */
   //state_ = state_ + process_noise;
+  /*
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
   state_[StateMemberFz] = 0;
+  */
 /*
   printf("---state adding noise---\n");
 
