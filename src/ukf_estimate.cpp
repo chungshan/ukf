@@ -50,6 +50,7 @@ double lambda_;
 bool uncorrected_;
 int flag;
 int flag2;
+int flag3;
 float imu_pitch, imu_yaw, imu_roll;
 /*test variable*/
 
@@ -250,10 +251,19 @@ void quaternionToRPY(){
   if(mocap_pose.pose.orientation.w == 0)
   {
     mocap_pose.pose.orientation.w = 1;
-    flag = 0;
+    flag2 = 0;
   }
   if(mocap_pose.pose.orientation.w != 0 && mocap_pose.pose.orientation.w != 1)
-    flag = 1;
+    flag2 = 1;
+
+  if(vfr_data.throttle == 0)
+  {
+    flag3 = 0;
+  }
+  if(vfr_data.throttle !=0)
+  {
+    flag3 = 1;
+  }
   //ROS_INFO("imu.x = %f", imu_data.orientation.x);
 
   //ROS_INFO("flag = %d", flag);
@@ -876,7 +886,7 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(15,15) = 0.01;
   process_noise_m(16,16) = 0.01;
   process_noise_m(17,17) = 0.01;
-  process_noise_m(18,18) = 0.01;
+  process_noise_m(18,18) = 0.00001;
 
    //print transfer function
  /*
@@ -1080,7 +1090,7 @@ int main(int argc, char **argv)
 
     quaternionToRPY();
 
-    if(flag ==1)
+    if(flag ==1 && flag2 ==1 && flag3 == 1)
     {
     writeInMeasurement();
     predict(1,0.02);
