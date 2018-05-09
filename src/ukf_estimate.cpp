@@ -793,9 +793,9 @@ void predict(const double referenceTime, const double delta)
 
 
 
-  double roll = state_(StateMemberRoll);
-  double pitch = state_(StateMemberPitch);
-  double yaw = state_(StateMemberYaw);
+  double roll = -state_(StateMemberRoll);
+  double pitch = -state_(StateMemberPitch);
+  double yaw = -state_(StateMemberYaw);
 
   // We'll need these trig calculations a lot.
   double sp = ::sin(pitch);
@@ -852,9 +852,11 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
   transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
   transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr;
+  //Thrust
   transferFunction_(StateMemberFx,StateMemberThrust) = -1*(cy * sp * cr + sy * sr);
   transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
   transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
+  //drag force
   transferFunction_(StateMemberFx,StateMemberVx) = 0.01*cy * cp;
   transferFunction_(StateMemberFx,StateMemberVy) = 0.01*(cy * sp * sr - sy * cr);
   transferFunction_(StateMemberFx,StateMemberVz) = 0.01*(cy * sp * cr + sy * sr);
@@ -883,9 +885,9 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(12,12) = 0.01;
   process_noise_m(13,13) = 0.01;
   process_noise_m(14,14) = 0.015;
-  process_noise_m(15,15) = 0.01;
-  process_noise_m(16,16) = 0.01;
-  process_noise_m(17,17) = 0.01;
+  process_noise_m(15,15) = 0.5;
+  process_noise_m(16,16) = 0.5;
+  process_noise_m(17,17) = 0.4;
   process_noise_m(18,18) = 0.00001;
 
    //print transfer function
