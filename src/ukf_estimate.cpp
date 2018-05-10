@@ -800,9 +800,9 @@ void predict(const double referenceTime, const double delta)
 
 
 
-  double roll = -state_(StateMemberRoll);
-  double pitch = -state_(StateMemberPitch);
-  double yaw = -state_(StateMemberYaw);
+  double roll = state_(StateMemberRoll);
+  double pitch = state_(StateMemberPitch);
+  double yaw = state_(StateMemberYaw);
 
   // We'll need these trig calculations a lot.
   double sp = ::sin(pitch);
@@ -874,7 +874,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
   transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
 
-  state_[StateMemberFz] = state_[StateMemberFz] - m * 9.81;
+  state_[StateMemberFz] = state_[StateMemberFz] + m * 9.81;
 
 
   process_noise_m(0,0) = 0.05;
@@ -1096,6 +1096,7 @@ int main(int argc, char **argv)
   ros::Rate rate(50);
   while(ros::ok()){
     output.header.stamp = ros::Time::now();
+
     //imu_data.header.stamp = ros::Time::now();
     //svo_pose.header.stamp = ros::Time::now();
 
