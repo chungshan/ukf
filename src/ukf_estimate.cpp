@@ -789,8 +789,11 @@ void predict(const double referenceTime, const double delta)
   //ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(19,19);
   Eigen::MatrixXd process_noise_m(19,19);
-  double m = 0.8;
+  double m = 0.6;
   const int STATE_SIZE = 19;
+  float k_drag_x = 0.12;
+  float k_drag_y = 0.12;
+  float k_drag_z = 0.12;
 
 
 
@@ -858,15 +861,15 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
   transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
   //drag force
-  transferFunction_(StateMemberFx,StateMemberVx) = 0.12*cy * cp;
-  transferFunction_(StateMemberFx,StateMemberVy) = 0.12*(cy * sp * sr - sy * cr);
-  transferFunction_(StateMemberFx,StateMemberVz) = 0.12*(cy * sp * cr + sy * sr);
-  transferFunction_(StateMemberFy,StateMemberVx) = 0.12*sy * cp ;
-  transferFunction_(StateMemberFy,StateMemberVy) = 0.12*(sy * sp * sr + cy * cr);
-  transferFunction_(StateMemberFy,StateMemberVz) = 0.12*(sy * sp * cr - cy * sr);
-  transferFunction_(StateMemberFz,StateMemberVx) = 0.12*(-sp) ;
-  transferFunction_(StateMemberFz,StateMemberVy) = 0.12*cp * sr;
-  transferFunction_(StateMemberFz,StateMemberVz) = 0.12*cp * cr;
+  transferFunction_(StateMemberFx,StateMemberVx) = k_drag_x*cy * cp;
+  transferFunction_(StateMemberFx,StateMemberVy) = k_drag_y*(cy * sp * sr - sy * cr);
+  transferFunction_(StateMemberFx,StateMemberVz) = k_drag_z*(cy * sp * cr + sy * sr);
+  transferFunction_(StateMemberFy,StateMemberVx) = k_drag_x*sy * cp ;
+  transferFunction_(StateMemberFy,StateMemberVy) = k_drag_y*(sy * sp * sr + cy * cr);
+  transferFunction_(StateMemberFy,StateMemberVz) = k_drag_z*(sy * sp * cr - cy * sr);
+  transferFunction_(StateMemberFz,StateMemberVx) = k_drag_x*(-sp) ;
+  transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
+  transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
 
   state_[StateMemberFz] = state_[StateMemberFz] - m * 9.81;
 
