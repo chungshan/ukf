@@ -6,11 +6,15 @@
 #include <tf/transform_datatypes.h>
 #include <nav_msgs/Odometry.h>
 #include <mavros_msgs/VFR_HUD.h>
+#include <UKF/output.h>
+
+
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 geometry_msgs::PoseStamped mocap_pose;
 sensor_msgs::Imu imu_data;
 nav_msgs::Odometry filterd;
 mavros_msgs::VFR_HUD vfr_data;
+UKF::output output;
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
 }
@@ -736,8 +740,20 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
     ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
+    output.pose.pose.position.x = state_[StateMemberX];
+    output.pose.pose.position.y = state_[StateMemberY];
+    output.pose.pose.position.z = state_[StateMemberZ];
 
+    output.twist.twist.linear.x = state_[StateMemberVx];
+    output.twist.twist.linear.y = state_[StateMemberVy];
+    output.twist.twist.linear.z = state_[StateMemberVz];
+    output.twist.twist.angular.x = state_[StateMemberRoll];
+    output.twist.twist.angular.y = state_[StateMemberPitch];
+    output.twist.twist.angular.z = state_[StateMemberYaw];
 
+    output.force.x = state_[StateMemberFx];
+    output.force.y = state_[StateMemberFy];
+    output.force.z = state_[StateMemberFz];
 
     filterd.pose.pose.position.x = state_[0];
     filterd.pose.pose.position.y = state_[1];
@@ -1088,11 +1104,11 @@ int main(int argc, char **argv)
   ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 10, mocap_cb);
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone1/mavros/imu/data", 10, imu_cb);
   ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>("/drone1/mavros/vfr_hud", 10, vfr_cb);
-  ros::Publisher filtered_pub = nh.advertise<nav_msgs::Odometry>("/filtered/odom",10);
+  ros::Publisher output_pub = nh.advertise<UKF::output>("/output",10);
   initialize();
   ros::Rate rate(50);
   while(ros::ok()){
-    filterd.header.stamp = ros::Time::now();
+    output.header.stamp = ros::Time::now();
     //imu_data.header.stamp = ros::Time::now();
     //svo_pose.header.stamp = ros::Time::now();
 
@@ -1105,7 +1121,7 @@ int main(int argc, char **argv)
     correct();
     }
 
-    filtered_pub.publish(filterd);
+    output_pub.publish(output);
 
   ros::spinOnce();
     rate.sleep();
