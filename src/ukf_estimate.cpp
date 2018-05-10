@@ -740,20 +740,7 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
     ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
-    output.pose.pose.position.x = state_[StateMemberX];
-    output.pose.pose.position.y = state_[StateMemberY];
-    output.pose.pose.position.z = state_[StateMemberZ];
 
-    output.twist.twist.linear.x = state_[StateMemberVx];
-    output.twist.twist.linear.y = state_[StateMemberVy];
-    output.twist.twist.linear.z = state_[StateMemberVz];
-    output.twist.twist.angular.x = state_[StateMemberRoll];
-    output.twist.twist.angular.y = state_[StateMemberPitch];
-    output.twist.twist.angular.z = state_[StateMemberYaw];
-
-    output.force.x = state_[StateMemberFx];
-    output.force.y = state_[StateMemberFy];
-    output.force.z = state_[StateMemberFz];
 
     filterd.pose.pose.position.x = state_[0];
     filterd.pose.pose.position.y = state_[1];
@@ -1120,6 +1107,20 @@ int main(int argc, char **argv)
     predict(1,0.02);
     correct();
     }
+    output.pose.pose.position.x = state_[StateMemberX];
+    output.pose.pose.position.y = state_[StateMemberY];
+    output.pose.pose.position.z = state_[StateMemberZ];
+
+    output.twist.twist.linear.x = state_[StateMemberVx];
+    output.twist.twist.linear.y = state_[StateMemberVy];
+    output.twist.twist.linear.z = state_[StateMemberVz];
+    output.twist.twist.angular.x = state_[StateMemberRoll];
+    output.twist.twist.angular.y = state_[StateMemberPitch];
+    output.twist.twist.angular.z = state_[StateMemberYaw];
+
+    output.force.x = state_[StateMemberFx];
+    output.force.y = state_[StateMemberFy];
+    output.force.z = state_[StateMemberFz];
 
     output_pub.publish(output);
 
