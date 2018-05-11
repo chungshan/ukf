@@ -332,6 +332,8 @@ void writeInMeasurement(){
   test*/
   measurement.measurement_.resize(19);
   float roll, pitch , yaw;
+  const float imu_ax_bias = 0.1436;
+  const float imu_ay_bias = -0.001622;
   Eigen::Matrix3f Rx, Ry, Rz;
   Eigen::Vector3f a_g_inertial;
   Eigen::Vector3f a_g_body;
@@ -389,8 +391,8 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberZ] = 0 ;
 */
 
-  measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x + a_g_body(0));
-  measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y + a_g_body(1));
+  measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias + a_g_body(0));
+  measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
   measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
 
   /*
@@ -1128,6 +1130,21 @@ int main(int argc, char **argv)
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
+
+    if(abs(output.force.x) > 0.3){
+      ROS_INFO("Fx is larger than 0.3.");
+      ROS_INFO("Fx = %f", output.force.x);
+    }
+
+    if(abs(output.force.y) > 0.3){
+      ROS_INFO("Fy is larger than 0.3.");
+      ROS_INFO("Fy = %f", output.force.y);
+    }
+
+    if(abs(output.force.z) > 0.3){
+      ROS_INFO("Fz is larger than 0.3.");
+      ROS_INFO("Fz = %f", output.force.z);
+    }
 
     output.linear_acceleration.x = state_[StateMemberAx];
     output.linear_acceleration.y = state_[StateMemberAy];
