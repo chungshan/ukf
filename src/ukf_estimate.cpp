@@ -15,6 +15,7 @@ sensor_msgs::Imu imu_data;
 nav_msgs::Odometry filterd;
 mavros_msgs::VFR_HUD vfr_data;
 UKF::output output;
+
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
 }
@@ -398,7 +399,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.5)*3*9.81 + 0.6*9.81;
+  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.455)*3*9.81 + 0.6*9.81;
 /*
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
@@ -418,6 +419,7 @@ void writeInMeasurement(){
 
 void correct(){
   //ROS_INFO("---correct start---\n");
+
 
   const int STATE_SIZE = 19;
   const double PI = 3.141592653589793;
@@ -669,7 +671,7 @@ void correct(){
     }
   }
 */
-  /*
+/*
   printf("---kalmanGain---\n");
   for(int i = 0;i<19;i++){
     for(int j = 0; j < 19; j++){
@@ -678,8 +680,8 @@ void correct(){
     printf("\n");
   }
   printf("\n");
-
 */
+
   // (8) Apply the gain to the difference between the actual and predicted measurements: x = x + K(y - y_hat)
   // y - y_hat
   //ROS_INFO("measure = %f",measurementSubset[0]);
@@ -739,15 +741,16 @@ void correct(){
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
-    ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
+    //ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
-
+/*
     filterd.pose.pose.position.x = state_[0];
     filterd.pose.pose.position.y = state_[1];
     filterd.pose.pose.position.z = state_[2];
     filterd.twist.twist.linear.x = state_[6];
     filterd.twist.twist.linear.y = state_[7];
     filterd.twist.twist.linear.z = state_[8];
+    */
     //ROS_INFO("filtered_x = %f", filterd.pose.pose.position.x);
 
 
@@ -796,7 +799,7 @@ void predict(const double referenceTime, const double delta)
   const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
-  float k_drag_z = 0.12;
+  float k_drag_z = 0.22;
 
 
 
@@ -873,8 +876,6 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberVx) = k_drag_x*(-sp) ;
   transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
   transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
-
-  state_[StateMemberFz] = state_[StateMemberFz] + m * 9.81;
 
 
   process_noise_m(0,0) = 0.05;
@@ -999,6 +1000,9 @@ printf("\n");
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
+  state_[StateMemberFz] = state_[StateMemberFz] + m * 9.81;
+
+
   /*
   printf("---state before adding noise---\n");
 
@@ -1048,6 +1052,7 @@ printf("\n");
   }
   printf("\n");
 */
+
   Eigen::VectorXd sigmaDiff(STATE_SIZE);
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
   {
@@ -1108,6 +1113,7 @@ int main(int argc, char **argv)
     predict(1,0.02);
     correct();
     }
+    /*
     output.pose.pose.position.x = state_[StateMemberX];
     output.pose.pose.position.y = state_[StateMemberY];
     output.pose.pose.position.z = state_[StateMemberZ];
@@ -1118,10 +1124,20 @@ int main(int argc, char **argv)
     output.twist.twist.angular.x = state_[StateMemberRoll];
     output.twist.twist.angular.y = state_[StateMemberPitch];
     output.twist.twist.angular.z = state_[StateMemberYaw];
-
+*/
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
+
+    output.linear_acceleration.x = state_[StateMemberAx];
+    output.linear_acceleration.y = state_[StateMemberAy];
+    output.linear_acceleration.z = state_[StateMemberAz];
+
+  //ROS_INFO("Thrust = %f", state_[StateMemberThrust]);
+
+
+
+
 
     output_pub.publish(output);
 
