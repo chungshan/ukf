@@ -401,7 +401,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.455)*3*9.81 + 0.6*9.81;
+  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.495)*3*9.81 + 0.6*9.81;
 /*
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
@@ -896,7 +896,7 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(13,13) = 0.01;
   process_noise_m(14,14) = 0.015;
   process_noise_m(15,15) = 0.5;
-  process_noise_m(16,16) = 0.5;
+  process_noise_m(16,16) = 0.6;
   process_noise_m(17,17) = 0.4;
   process_noise_m(18,18) = 0.00001;
 
@@ -907,6 +907,7 @@ void predict(const double referenceTime, const double delta)
     for (int j = 0; j < 19; j++){
       printf("%f ", transferFunction_(i,j));
     }
+
     printf("\n");
   }
   printf("\n");
@@ -1100,6 +1101,7 @@ int main(int argc, char **argv)
   ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>("/drone1/mavros/vfr_hud", 10, vfr_cb);
   ros::Publisher output_pub = nh.advertise<UKF::output>("/output",10);
   initialize();
+  int count = 0;
   ros::Rate rate(50);
   while(ros::ok()){
     output.header.stamp = ros::Time::now();
@@ -1108,6 +1110,7 @@ int main(int argc, char **argv)
     //svo_pose.header.stamp = ros::Time::now();
 
     quaternionToRPY();
+
 
     if(flag ==1 && flag2 ==1 && flag3 == 1)
     {
@@ -1131,21 +1134,24 @@ int main(int argc, char **argv)
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
 
+/*
     if(abs(output.force.x) > 0.3){
       ROS_INFO("Fx is larger than 0.3.");
       ROS_INFO("Fx = %f", output.force.x);
     }
-
+*/
     if(abs(output.force.y) > 0.3){
       ROS_INFO("Fy is larger than 0.3.");
       ROS_INFO("Fy = %f", output.force.y);
+      count += 1;
+      ROS_INFO("count = %d", count);
     }
-
+/*
     if(abs(output.force.z) > 0.3){
       ROS_INFO("Fz is larger than 0.3.");
       ROS_INFO("Fz = %f", output.force.z);
     }
-
+*/
     output.linear_acceleration.x = state_[StateMemberAx];
     output.linear_acceleration.y = state_[StateMemberAy];
     output.linear_acceleration.z = state_[StateMemberAz];
