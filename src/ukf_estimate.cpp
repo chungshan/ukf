@@ -57,6 +57,7 @@ int flag;
 int flag2;
 int flag3;
 float imu_pitch, imu_yaw, imu_roll;
+const float a_g = 9.807455;
 /*test variable*/
 
 
@@ -206,7 +207,7 @@ void initialize(){
 
   // Initialize state by using first measurement x_0
   state_.setZero();
-  state_[StateMemberThrust] = 0.6*9.81;
+  state_[StateMemberThrust] = 0.6*a_g;
 
   uncorrected_ = false;
 
@@ -332,8 +333,8 @@ void writeInMeasurement(){
   test*/
   measurement.measurement_.resize(19);
   float roll, pitch , yaw;
-  const float imu_ax_bias = 0.1436;
-  const float imu_ay_bias = -0.001622;
+  const float imu_ax_bias = -0.077781;
+  const float imu_ay_bias = 0.083215;
   Eigen::Matrix3f Rx, Ry, Rz;
   Eigen::Vector3f a_g_inertial;
   Eigen::Vector3f a_g_body;
@@ -344,7 +345,7 @@ void writeInMeasurement(){
 
   a_g_inertial(0) = 0;
   a_g_inertial(1) = 0;
-  a_g_inertial(2) = 9.81;
+  a_g_inertial(2) = a_g;
   roll = imu_roll;
   pitch = imu_pitch;
   yaw = imu_yaw;
@@ -380,7 +381,7 @@ void writeInMeasurement(){
 
   a_g_body = Ry*Rx*Rz*a_g_inertial;
   //a_g_body(0) = (sin(yaw)*sin(roll) + cos(yaw)*sin(pitch)*cos(roll)) * 9.8;
-  a_g_body(0) = sin(pitch)*cos(roll)*9.8;
+  a_g_body(0) = sin(pitch)*cos(roll)*a_g;
   measurement.measurement_[StateMemberX] = mocap_pose.pose.position.x ;
   measurement.measurement_[StateMemberY] = mocap_pose.pose.position.y ;
   measurement.measurement_[StateMemberZ] = mocap_pose.pose.position.z ;
@@ -401,7 +402,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.495)*3*9.81 + 0.6*9.81;
+  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.495)*3*a_g + 0.6*a_g;
 /*
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
@@ -1003,7 +1004,7 @@ printf("\n");
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
-  state_[StateMemberFz] = state_[StateMemberFz] + m * 9.81;
+  state_[StateMemberFz] = state_[StateMemberFz] + m * a_g;
 
 
   /*
