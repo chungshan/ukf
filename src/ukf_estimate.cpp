@@ -44,10 +44,11 @@ struct Measurement
 Measurement measurement;
 
 // Global variable
-Eigen::VectorXd state_(19); //x
-Eigen::MatrixXd weightedCovarSqrt_(19,19); // square root of (L+lamda)*P_k-1
-Eigen::MatrixXd estimateErrorCovariance_(19,19); // P_k-1
-Eigen::VectorXd process_noise(19);
+const int STATE_SIZE = 12;
+Eigen::VectorXd state_(STATE_SIZE); //x
+Eigen::MatrixXd weightedCovarSqrt_(STATE_SIZE,STATE_SIZE); // square root of (L+lamda)*P_k-1
+Eigen::MatrixXd estimateErrorCovariance_(STATE_SIZE,STATE_SIZE); // P_k-1
+Eigen::VectorXd process_noise(STATE_SIZE);
 std::vector<Eigen::VectorXd> sigmaPoints_;
 std::vector<double> stateWeights_;
 std::vector<double> covarWeights_;
@@ -74,16 +75,9 @@ enum StateMembers
   StateMemberVx,
   StateMemberVy,
   StateMemberVz,
-  StateMemberVroll,
-  StateMemberVpitch,
-  StateMemberVyaw,
   StateMemberAx,
   StateMemberAy,
   StateMemberAz,
-  StateMemberFx,
-  StateMemberFy,
-  StateMemberFz,
-  StateMemberThrust
 };
 
 bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
@@ -116,7 +110,7 @@ void initialize(){
   double alpha = 1e-3;
   double kappa = 0;
   double beta = 2;
-  const int STATE_SIZE = 19;
+  //const int STATE_SIZE = 19;
   float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 37(19 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
 
@@ -167,16 +161,11 @@ void initialize(){
   estimateErrorCovariance_(6,6) = 1e-06;// Vx
   estimateErrorCovariance_(7,7) = 1e-06;// Vy
   estimateErrorCovariance_(8,8) = 1e-06;// Vz
-  estimateErrorCovariance_(9,9) = 1e-06;// Vroll
-  estimateErrorCovariance_(10,10) = 1e-06;// Vpitch
-  estimateErrorCovariance_(11,11) = 1e-06;// Vyaw
-  estimateErrorCovariance_(12,12) = 1e-02;// Ax
-  estimateErrorCovariance_(13,13) = 1e-02;// Ay
-  estimateErrorCovariance_(14,14) = 1e-02;// Az
-  estimateErrorCovariance_(15,15) = 1e-06;//Fx
-  estimateErrorCovariance_(16,16) = 1e-06;//Fy
-  estimateErrorCovariance_(17,17) = 1e-06;//Fz
-  estimateErrorCovariance_(18,18) = 1e-02;//Thrust
+
+  estimateErrorCovariance_(9,9) = 1e-02;// Ax
+  estimateErrorCovariance_(10,10) = 1e-02;// Ay
+  estimateErrorCovariance_(11,11) = 1e-02;// Az
+
 /*
   //process noise
   for(int i = 0; i < 19; i++){
@@ -207,7 +196,7 @@ void initialize(){
 
   // Initialize state by using first measurement x_0
   state_.setZero();
-  state_[StateMemberThrust] = 0.6*a_g;
+  //state_[StateMemberThrust] = 0.6*a_g;
 
   uncorrected_ = false;
 
@@ -331,7 +320,7 @@ void writeInMeasurement(){
   imu_data.linear_acceleration.y = 0.0;
   imu_data.linear_acceleration.z = 9.9 - 9.8;
   test*/
-  measurement.measurement_.resize(19);
+  measurement.measurement_.resize(STATE_SIZE);
   float roll, pitch , yaw;
   const float imu_ax_bias = -0.077781;
   const float imu_ay_bias = 0.083215;
@@ -402,7 +391,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.495)*3*a_g + 0.6*a_g;
+  //measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.495)*3*a_g + 0.6*a_g;
 /*
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
@@ -424,7 +413,7 @@ void correct(){
   //ROS_INFO("---correct start---\n");
 
 
-  const int STATE_SIZE = 19;
+  //const int STATE_SIZE = 19;
   const double PI = 3.141592653589793;
   const double TAU = 6.283195307179587;
 
@@ -498,27 +487,20 @@ void correct(){
   stateToMeasurementSubset(6,6) = 0;
   stateToMeasurementSubset(7,7) = 0;
   stateToMeasurementSubset(8,8) = 0;
-  stateToMeasurementSubset(9,9) = 0;
-  stateToMeasurementSubset(10,10) = 0;
-  stateToMeasurementSubset(11,11) = 0;
-  stateToMeasurementSubset(12,12) = 1;
-  stateToMeasurementSubset(13,13) = 1;
-  stateToMeasurementSubset(14,14) = 1;
-  stateToMeasurementSubset(15,15) = 0;
-  stateToMeasurementSubset(16,16) = 0;
-  stateToMeasurementSubset(17,17) = 0;
-  stateToMeasurementSubset(18,18) = 1;
+  stateToMeasurementSubset(9,9) = 1;
+  stateToMeasurementSubset(10,10) = 1;
+  stateToMeasurementSubset(11,11) = 1;
+
 
   //The measurecovariance subset R
 
   measurementCovarianceSubset(0,0) = 0.2;
   measurementCovarianceSubset(1,1) = 0.2;
   measurementCovarianceSubset(2,2) = 0.2;
-  measurementCovarianceSubset(12,12) = 0.2;
-  measurementCovarianceSubset(13,13) = 0.2;
-  measurementCovarianceSubset(14,14) = 0.2;
-  measurementCovarianceSubset(18,18) = 0.2;
-  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = 0.4;
+  measurementCovarianceSubset(9,9) = 0.2;
+  measurementCovarianceSubset(10,10) = 0.2;
+  measurementCovarianceSubset(11,11) = 0.2;
+  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8)  = 0.4;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
@@ -569,62 +551,30 @@ void correct(){
   }
 */
   //check p_y_k~_y_k_~ value
-  for (int i = 3; i < 19 ; i++){
+  for (int i = 3; i < 9 ; i++){
     for (int j = 0; j < 12 ; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 0; i < 3;i++){
-    for (int j =3; j < 19 ; j++){
+  for (int i = 3; i < 9;i++){
+    for (int j = 0; j < 3 ; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 12 ; i < 15 ; i++){
-    for(int j = 15 ; j < 19; j++){
+  for (int i = 3 ; i < 9 ; i++){
+    for(int j = 9 ; j < 12; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 12; i < 19; i++){
-    for(int j = 15; j < 19; j++){
-      predictedMeasCovar(i,j) = 0;
-    }
-  }
-  for (int i = 15; i < 19; i++){
-    for (int j = 12; j < 15;j++)
-      predictedMeasCovar(i,j) = 0;
-  }
-  //Thrust
 
-    for(int j = 3; j < 13;j++){
-      predictedMeasCovar(18,j) = 0;
-    }
-
-
-    for(int j = 15; j < 19;j++){
-      predictedMeasCovar(18,j) = 0;
-    }
-
-
-    for(int i = 3; i < 13;i++){
-      predictedMeasCovar(i,18) = 0;
-    }
-
-
-    for(int i = 15; i < 19;i++){
-      predictedMeasCovar(i,18) = 0;
-    }
 
   //check P_x_k_y_k value
-  for(int i = 0; i < 19; i++){
-    for(int j = 3; j < 12; j++){
+  for(int i = 0; i < 12; i++){
+    for(int j = 3; j < 9; j++){
       crossCovar(i,j) = 0;
     }
   }
-  for(int i = 0; i < 19; i++){
-    for(int j = 15; j < 18; j++){
-      crossCovar(i,j) = 0;
-    }
-  }
+
 /*
   printf("---sigmaDiff of y---\n");
   for(int i = 0; i < 19; i++){
@@ -747,29 +697,32 @@ void correct(){
     //ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
     //output data
+    /*
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
-
+*/
 /*
     if(abs(output.force.x) > 0.3){
       ROS_INFO("Fx is larger than 0.3.");
       ROS_INFO("Fx = %f", output.force.x);
     }
 */
+    /*
     if(abs(output.force.y) > 0.3){
       ROS_INFO("Fy is larger than 0.3.");
       ROS_INFO("Fy = %f", output.force.y);
     }
+    */
 /*
     if(abs(output.force.z) > 0.3){
       ROS_INFO("Fz is larger than 0.3.");
       ROS_INFO("Fz = %f", output.force.z);
     }
 */
-    output.linear_acceleration.x = state_[StateMemberAx];
-    output.linear_acceleration.y = state_[StateMemberAy];
-    output.linear_acceleration.z = state_[StateMemberAz];
+    output.position.x = state_[StateMemberX];
+    output.position.y = state_[StateMemberY];
+    output.position.z = state_[StateMemberZ];
 
   //ROS_INFO("Thrust = %f", state_[StateMemberThrust]);
 
@@ -859,6 +812,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberZ, StateMemberAy) = 0.5 * transferFunction_(StateMemberZ, StateMemberVy) * delta;
   transferFunction_(StateMemberZ, StateMemberAz) = 0.5 * transferFunction_(StateMemberZ, StateMemberVz) * delta;
   //angle prediction
+  /*
   transferFunction_(StateMemberRoll, StateMemberVroll) = transferFunction_(StateMemberX, StateMemberVx);
   transferFunction_(StateMemberRoll, StateMemberVpitch) = transferFunction_(StateMemberX, StateMemberVy);
   transferFunction_(StateMemberRoll, StateMemberVyaw) = transferFunction_(StateMemberX, StateMemberVz);
@@ -868,11 +822,13 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberYaw, StateMemberVroll) = transferFunction_(StateMemberZ, StateMemberVx);
   transferFunction_(StateMemberYaw, StateMemberVpitch) = transferFunction_(StateMemberZ, StateMemberVy);
   transferFunction_(StateMemberYaw, StateMemberVyaw) = transferFunction_(StateMemberZ, StateMemberVz);
+  */
   //Velocity prediction
   transferFunction_(StateMemberVx, StateMemberAx) = delta;
   transferFunction_(StateMemberVy, StateMemberAy) = delta;
   transferFunction_(StateMemberVz, StateMemberAz) = delta;
   //Force prediction
+  /*
   transferFunction_(StateMemberFx,StateMemberAx) = m*cy * cp;
   transferFunction_(StateMemberFx,StateMemberAy) = m*(cy * sp * sr - sy * cr);
   transferFunction_(StateMemberFx,StateMemberAz) = m*(cy * sp * cr + sy * sr);
@@ -897,7 +853,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
   transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
 
-
+*/
   process_noise_m(0,0) = 0.05;
   process_noise_m(1,1) = 0.05;
   process_noise_m(2,2) = 0.06;
@@ -1021,7 +977,7 @@ printf("\n");
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
-  state_[StateMemberFz] = state_[StateMemberFz] + m * a_g;
+  //state_[StateMemberFz] = state_[StateMemberFz] + m * a_g;
 
 
   /*
