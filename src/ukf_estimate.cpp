@@ -25,7 +25,7 @@ void mocap_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
 }
 
 void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
-  imu_data = *msg;//test
+  imu_data = *msg;//branch test
 }
 
 void vfr_cb(const mavros_msgs::VFR_HUD::ConstPtr &msg){
