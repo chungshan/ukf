@@ -44,10 +44,11 @@ struct Measurement
 Measurement measurement;
 
 // Global variable
-Eigen::VectorXd state_(19); //x
-Eigen::MatrixXd weightedCovarSqrt_(19,19); // square root of (L+lamda)*P_k-1
-Eigen::MatrixXd estimateErrorCovariance_(19,19); // P_k-1
-Eigen::VectorXd process_noise(19);
+const int STATE_SIZE = 37;
+Eigen::VectorXd state_(STATE_SIZE); //x
+Eigen::MatrixXd weightedCovarSqrt_(STATE_SIZE,STATE_SIZE); // square root of (L+lamda)*P_k-1
+Eigen::MatrixXd estimateErrorCovariance_(STATE_SIZE,STATE_SIZE); // P_k-1
+Eigen::VectorXd process_noise(STATE_SIZE);
 std::vector<Eigen::VectorXd> sigmaPoints_;
 std::vector<double> stateWeights_;
 std::vector<double> covarWeights_;
@@ -83,7 +84,25 @@ enum StateMembers
   StateMemberFx,
   StateMemberFy,
   StateMemberFz,
-  StateMemberThrust
+  StateMemberThrust,
+  StateMemberFx_L,
+  StateMemberFy_L,
+  StateMemberFz_L,
+  StateMemberApx,
+  StateMemberApy,
+  StateMemberApz,
+  StateMemberAcx,
+  StateMemberAcy,
+  StateMemberAcz,
+  StateMemberARoll_cf,//alpha_CF, angular accleration on rope
+  StateMemberAPitch_cf,
+  StateMemberAYaw_cf,
+  StateMemberARoll_c,//alpha_C, angular acceleration on connection
+  StateMemberAPitch_c,
+  StateMemberAYaw_c,
+  StateMemberVRoll_c,//alpha_C, angular velocity on connection
+  StateMemberVPitch_c,
+  StateMemberVYaw_c
 };
 
 bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
@@ -116,7 +135,7 @@ void initialize(){
   double alpha = 1e-3;
   double kappa = 0;
   double beta = 2;
-  const int STATE_SIZE = 19;
+  //const int STATE_SIZE = 19;
   float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 37(19 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
 
@@ -331,7 +350,7 @@ void writeInMeasurement(){
   imu_data.linear_acceleration.y = 0.0;
   imu_data.linear_acceleration.z = 9.9 - 9.8;
   test*/
-  measurement.measurement_.resize(19);
+  measurement.measurement_.resize(STATE_SIZE);
   float roll, pitch , yaw;
   const float imu_ax_bias = -0.077781;
   const float imu_ay_bias = 0.083215;
@@ -402,7 +421,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  measurement.measurement_[StateMemberThrust] = (vfr_data.throttle - 0.495)*3*a_g + 0.6*a_g;
+  state_[StateMemberThrust] = (vfr_data.throttle - 0.495)*3*a_g + 0.6*a_g;
 /*
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
@@ -424,7 +443,7 @@ void correct(){
   //ROS_INFO("---correct start---\n");
 
 
-  const int STATE_SIZE = 19;
+  //const int STATE_SIZE = 19;
   const double PI = 3.141592653589793;
   const double TAU = 6.283195307179587;
 
@@ -451,7 +470,7 @@ void correct(){
 
   // First, determine how many state vector values we're updating
 
-  size_t updateSize = 19 ;
+  //size_t updateSize = 19 ;
 
   // Now set up the relevant matrices
   //Eigen::VectorXd stateSubset(updateSize);                              // x (in most literature)
@@ -507,7 +526,7 @@ void correct(){
   stateToMeasurementSubset(15,15) = 0;
   stateToMeasurementSubset(16,16) = 0;
   stateToMeasurementSubset(17,17) = 0;
-  stateToMeasurementSubset(18,18) = 1;
+  stateToMeasurementSubset(18,18) = 0;
 
   //The measurecovariance subset R
 
@@ -813,10 +832,10 @@ void correct(){
 void predict(const double referenceTime, const double delta)
 {
   //ROS_INFO("---Predict start---");
-  Eigen::MatrixXd transferFunction_(19,19);
-  Eigen::MatrixXd process_noise_m(19,19);
-  double m = 0.6;
-  const int STATE_SIZE = 19;
+  Eigen::MatrixXd transferFunction_(STATE_SIZE,STATE_SIZE);
+  Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
+  double m = 0.6,m_p = 0.6;
+  //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
   float k_drag_z = 0.22;
@@ -872,7 +891,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberVx, StateMemberAx) = delta;
   transferFunction_(StateMemberVy, StateMemberAy) = delta;
   transferFunction_(StateMemberVz, StateMemberAz) = delta;
-  //Force prediction
+  //Force prediction(follower)
   transferFunction_(StateMemberFx,StateMemberAx) = m*cy * cp;
   transferFunction_(StateMemberFx,StateMemberAy) = m*(cy * sp * sr - sy * cr);
   transferFunction_(StateMemberFx,StateMemberAz) = m*(cy * sp * cr + sy * sr);
@@ -896,6 +915,9 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberVx) = k_drag_x*(-sp) ;
   transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
   transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
+  //Force prediction(leader)
+
+
 
 
   process_noise_m(0,0) = 0.05;
