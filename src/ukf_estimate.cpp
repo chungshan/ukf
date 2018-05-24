@@ -44,7 +44,7 @@ struct Measurement
 Measurement measurement;
 
 // Global variable
-const int STATE_SIZE = 37;
+const int STATE_SIZE = 19;
 Eigen::VectorXd state_(STATE_SIZE); //x
 Eigen::MatrixXd weightedCovarSqrt_(STATE_SIZE,STATE_SIZE); // square root of (L+lamda)*P_k-1
 Eigen::MatrixXd estimateErrorCovariance_(STATE_SIZE,STATE_SIZE); // P_k-1
@@ -85,24 +85,6 @@ enum StateMembers
   StateMemberFy,
   StateMemberFz,
   StateMemberThrust,
-  StateMemberFx_L,
-  StateMemberFy_L,
-  StateMemberFz_L,
-  StateMemberApx,
-  StateMemberApy,
-  StateMemberApz,
-  StateMemberAcx,
-  StateMemberAcy,
-  StateMemberAcz,
-  StateMemberARoll_cf,//alpha_CF, angular accleration on rope
-  StateMemberAPitch_cf,
-  StateMemberAYaw_cf,
-  StateMemberARoll_c,//alpha_C, angular acceleration on connection
-  StateMemberAPitch_c,
-  StateMemberAYaw_c,
-  StateMemberVRoll_c,//alpha_C, angular velocity on connection
-  StateMemberVPitch_c,
-  StateMemberVYaw_c
 };
 
 bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
@@ -762,7 +744,8 @@ void correct(){
   {
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
-    //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
+    //ROS_INFO("x = %f, y = %f, z = %f ", state_[0], state_[1], state_[2]);
+    ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
     //ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
     //output data
@@ -776,19 +759,19 @@ void correct(){
       ROS_INFO("Fx = %f", output.force.x);
     }
 */
+    /*
     if(abs(output.force.y) > 0.3){
       ROS_INFO("Fy is larger than 0.3.");
       ROS_INFO("Fy = %f", output.force.y);
     }
+    */
 /*
     if(abs(output.force.z) > 0.3){
       ROS_INFO("Fz is larger than 0.3.");
       ROS_INFO("Fz = %f", output.force.z);
     }
 */
-    output.linear_acceleration.x = state_[StateMemberAx];
-    output.linear_acceleration.y = state_[StateMemberAy];
-    output.linear_acceleration.z = state_[StateMemberAz];
+
 
   //ROS_INFO("Thrust = %f", state_[StateMemberThrust]);
 
@@ -855,8 +838,11 @@ void predict(const double referenceTime, const double delta)
 
   double sy = ::sin(yaw);
   double cy = ::cos(yaw);
+
   //ROS_INFO("sp = %f, cp = %f, sy = %f", sp , cp, sy);
   // Prepare the transfer function Rz*Ry*Rx
+  //For constant acceleration
+  /*
   transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = transferFunction_(18,18) = 1;
   //X,Y,Z prediction
   transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
@@ -915,7 +901,53 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberVx) = k_drag_x*(-sp) ;
   transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
   transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
-  //Force prediction(leader)
+*/
+
+  //X,Y,Z prediction
+  transferFunction_(StateMemberX,StateMemberX) = 1;
+  transferFunction_(StateMemberY,StateMemberY) = 1;
+  transferFunction_(StateMemberZ,StateMemberZ) = 1;
+  transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
+  transferFunction_(StateMemberX, StateMemberVy) = (cy * sp * sr - sy * cr) * delta;
+  transferFunction_(StateMemberX, StateMemberVz) = (cy * sp * cr + sy * sr) * delta;
+  //transferFunction_(StateMemberX, StateMemberAx) = 0.5 * transferFunction_(StateMemberX, StateMemberVx) * delta;
+  //transferFunction_(StateMemberX, StateMemberAy) = 0.5 * transferFunction_(StateMemberX, StateMemberVy) * delta;
+  //transferFunction_(StateMemberX, StateMemberAz) = 0.5 * transferFunction_(StateMemberX, StateMemberVz) * delta;
+  transferFunction_(StateMemberY, StateMemberVx) = sy * cp * delta;
+  transferFunction_(StateMemberY, StateMemberVy) = (sy * sp * sr + cy * cr) * delta;
+  transferFunction_(StateMemberY, StateMemberVz) = (sy * sp * cr - cy * sr) * delta;
+  //transferFunction_(StateMemberY, StateMemberAx) = 0.5 * transferFunction_(StateMemberY, StateMemberVx) * delta;
+  //transferFunction_(StateMemberY, StateMemberAy) = 0.5 * transferFunction_(StateMemberY, StateMemberVy) * delta;
+  //transferFunction_(StateMemberY, StateMemberAz) = 0.5 * transferFunction_(StateMemberY, StateMemberVz) * delta;
+  transferFunction_(StateMemberZ, StateMemberVx) = -sp * delta;
+  transferFunction_(StateMemberZ, StateMemberVy) = cp * sr * delta;
+  transferFunction_(StateMemberZ, StateMemberVz) = cp * cr * delta;
+  //transferFunction_(StateMemberZ, StateMemberAx) = 0.5 * transferFunction_(StateMemberZ, StateMemberVx) * delta;
+  //transferFunction_(StateMemberZ, StateMemberAy) = 0.5 * transferFunction_(StateMemberZ, StateMemberVy) * delta;
+  //transferFunction_(StateMemberZ, StateMemberAz) = 0.5 * transferFunction_(StateMemberZ, StateMemberVz) * delta;
+
+  //Velocity prediction
+  transferFunction_(StateMemberVx,StateMemberVx) = 1 - (1/m)*k_drag_x;
+  transferFunction_(StateMemberVy,StateMemberVy) = 1 - (1/m)*k_drag_y;
+  transferFunction_(StateMemberVz,StateMemberVz) = 1;
+  transferFunction_(StateMemberVx,StateMemberThrust) = (1/m)*(cy * sp * cr + sy * sr) * delta;
+  transferFunction_(StateMemberVy,StateMemberThrust) = (1/m)*(sy * sp * cr - cy * sr) * delta;
+  transferFunction_(StateMemberVz,StateMemberThrust) = (1/m)*cp * cr * delta;
+  transferFunction_(StateMemberVx,StateMemberFx) = 1;
+  transferFunction_(StateMemberVy,StateMemberFy) = 1;
+  transferFunction_(StateMemberVz,StateMemberFz) = 1;
+
+  //force prediction
+  transferFunction_(StateMemberFx,StateMemberFx) = 1;
+  transferFunction_(StateMemberFy,StateMemberFy) = 1;
+  transferFunction_(StateMemberFz,StateMemberFz) = 1;
+/*
+  transferFunction_(StateMemberAx,StateMemberAx) = 1;
+  transferFunction_(StateMemberAy,StateMemberAy) = 1;
+  transferFunction_(StateMemberAz,StateMemberAz) = 1;
+*/
+
+
 
 
 
@@ -938,7 +970,7 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(15,15) = 0.5;
   process_noise_m(16,16) = 0.6;
   process_noise_m(17,17) = 0.4;
-  process_noise_m(18,18) = 0.00001;
+  process_noise_m(18,18) = 0.01;
 
    //print transfer function
  /*
@@ -1043,8 +1075,8 @@ printf("\n");
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
-  state_[StateMemberFz] = state_[StateMemberFz] + m * a_g;
-
+  //state_[StateMemberFz] = state_[StateMemberFz] + m * a_g;
+  state_[StateMemberVz] = state_[StateMemberVz] + a_g * delta;
 
   /*
   printf("---state before adding noise---\n");
