@@ -7,7 +7,7 @@
 #include <nav_msgs/Odometry.h>
 #include <mavros_msgs/VFR_HUD.h>
 #include <UKF/output.h>
-
+#include <std_msgs/Float64.h>
 
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 geometry_msgs::PoseStamped mocap_pose;
@@ -399,6 +399,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias + a_g_body(0));
   measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
   measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
+  //ROS_INFO("az = %f", state_[StateMemberAz]);
 
   state_[a_g_x] = a_g_body(0);
   state_[a_g_y] = a_g_body(1);
@@ -410,7 +411,13 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  state_[StateMemberThrust] = (vfr_data.throttle - 0.495)*3*a_g + 0.6*a_g;
+  state_[StateMemberThrust] = (vfr_data.throttle - 0.46)*3*a_g + 0.6*a_g;
+
+
+  //output.thrust.x = state_[StateMemberThrust];
+
+  //output.thrust.z = -1;
+  //ROS_INFO("Thrust = %f", state_[StateMemberThrust]);
 /*
   state_[StateMemberFx] = 0;
   state_[StateMemberFy] = 0;
@@ -763,6 +770,9 @@ void correct(){
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
+    //output.thrust.y = state_[StateMemberAz];
+    //float angle = atan2(state_[StateMemberFx],state_[StateMemberFz]) * 180 / 3.1415926;
+    //ROS_INFO("theta_c = %f", angle);
 
 /*
     if(abs(output.force.x) > 0.3){
@@ -898,6 +908,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberVz, StateMemberAz) = delta;
   */
   //Force prediction(follower)
+
   transferFunction_(StateMemberFx,StateMemberAx) = m*cy * cp;
   transferFunction_(StateMemberFx,StateMemberAy) = m*(cy * sp * sr - sy * cr);
   transferFunction_(StateMemberFx,StateMemberAz) = m*(cy * sp * cr + sy * sr);
@@ -969,11 +980,39 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberVy,a_g_y) = 1 * delta;
   transferFunction_(StateMemberVz,a_g_z) = 1 * delta;
   //force prediction
-
+/*
+  transferFunction_(StateMemberFx,StateMemberFx) = 1;
+  transferFunction_(StateMemberFy,StateMemberFy) = 1;
+  transferFunction_(StateMemberFz,StateMemberFz) = 1;
+*/
 
   transferFunction_(StateMemberAx,StateMemberAx) = 1;
   transferFunction_(StateMemberAy,StateMemberAy) = 1;
   transferFunction_(StateMemberAz,StateMemberAz) = 1;
+  //acceleration predict
+  /*
+  transferFunction_(StateMemberAx,StateMemberVx) = k_drag_x * delta;
+  transferFunction_(StateMemberAy,StateMemberVy) = k_drag_y * delta;
+  transferFunction_(StateMemberAz,StateMemberVz) = k_drag_z * delta;
+
+  transferFunction_(StateMemberAz,StateMemberThrust) = 1 * delta;
+
+  transferFunction_(StateMemberAx,StateMemberFx) = (1/m) * cyi * cpi* delta;
+  transferFunction_(StateMemberAx,StateMemberFy) = (1/m) * (cyi * spi * sri - syi * cri) * delta;
+  transferFunction_(StateMemberAx,StateMemberFz) = (1/m) * (cyi * spi * cri + syi * sri) * delta;
+
+  transferFunction_(StateMemberAy,StateMemberFx) = (1/m) * syi * cpi * delta;
+  transferFunction_(StateMemberAy,StateMemberFy) = (1/m) * (syi * spi * sri + cyi * cri) * delta;
+  transferFunction_(StateMemberAy,StateMemberFz) = (1/m) * (syi * spi * cri - cyi * sri) * delta;
+
+  transferFunction_(StateMemberAz,StateMemberFx) = (1/m) * (-spi) * delta;
+  transferFunction_(StateMemberAz,StateMemberFy) = (1/m) * (cpi * sri) * delta;
+  transferFunction_(StateMemberAz,StateMemberFz) = (1/m) * (cpi * cri) * delta;
+
+  transferFunction_(StateMemberAx,a_g_x) = 1 * delta;
+  transferFunction_(StateMemberAy,a_g_y) = 1 * delta;
+  transferFunction_(StateMemberAz,a_g_z) = 1 * delta;
+*/
 
 
 
@@ -988,15 +1027,15 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(3,3) = 0.03;
   process_noise_m(4,4) = 0.03;
   process_noise_m(5,5) = 0.06;
-  process_noise_m(6,6) = 0.5;
-  process_noise_m(7,7) = 0.5;
-  process_noise_m(8,8) = 0.4;
+  process_noise_m(6,6) = 0.5;//Vx
+  process_noise_m(7,7) = 0.5;//Vy
+  process_noise_m(8,8) = 0.4;//Vz
   process_noise_m(9,9) = 0.01;
   process_noise_m(10,10) = 0.01;
   process_noise_m(11,11) = 0.02;
-  process_noise_m(12,12) = 0.01;
-  process_noise_m(13,13) = 0.01;
-  process_noise_m(14,14) = 0.015;
+  process_noise_m(12,12) = 0.5;//Ax
+  process_noise_m(13,13) = 0.5;//Ay
+  process_noise_m(14,14) = 0.8;//Az
   process_noise_m(15,15) = 0.5;
   process_noise_m(16,16) = 0.6;
   process_noise_m(17,17) = 0.4;
