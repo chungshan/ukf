@@ -776,6 +776,10 @@ void correct(){
     output.force.z = state_[StateMemberFz];
     //output.thrust.y = state_[StateMemberAz];
     float angle = atan2(state_[StateMemberFx],state_[StateMemberFz]) * 180 / 3.1415926;
+    if (angle > -180 && angle < -90){
+    angle += 90;
+    }
+    output.theta.x = angle;
     ROS_INFO("theta_c = %f", angle);
 
 /*
