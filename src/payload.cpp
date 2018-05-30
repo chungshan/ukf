@@ -396,9 +396,9 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberZ] = 0 ;
 */
 
-  measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias + a_g_body(0));
-  measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
-  measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
+  state_[StateMemberAx] = measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias + a_g_body(0));
+  state_[StateMemberAy] = measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
+  state_[StateMemberAz] = measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
   //ROS_INFO("az = %f", state_[StateMemberAz]);
 
   state_[a_g_x] = a_g_body(0);
@@ -415,7 +415,7 @@ void writeInMeasurement(){
 
 
   output.thrust.x = state_[StateMemberThrust];
-
+  output.thrust.y = 1;
   output.thrust.z = -1;
   //ROS_INFO("Thrust = %f", state_[StateMemberThrust]);
 /*
@@ -770,9 +770,8 @@ void correct(){
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
-    output.thrust.y = state_[StateMemberAz];
-    //float angle = atan2(state_[StateMemberFx],state_[StateMemberFz]) * 180 / 3.1415926;
-    //ROS_INFO("theta_c = %f", angle);
+    float angle = atan2(state_[StateMemberFx],state_[StateMemberFz]) * 180 / 3.1415926;
+    ROS_INFO("theta_c = %f", angle);
 
 /*
     if(abs(output.force.x) > 0.3){
@@ -986,9 +985,9 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberFz) = 1;
 */
 
-  transferFunction_(StateMemberAx,StateMemberAx) = 1;
-  transferFunction_(StateMemberAy,StateMemberAy) = 1;
-  transferFunction_(StateMemberAz,StateMemberAz) = 1;
+  //transferFunction_(StateMemberAx,StateMemberAx) = 1;
+  //transferFunction_(StateMemberAy,StateMemberAy) = 1;
+  //transferFunction_(StateMemberAz,StateMemberAz) = 1;
   //acceleration predict
   /*
   transferFunction_(StateMemberAx,StateMemberVx) = k_drag_x * delta;
@@ -1033,9 +1032,9 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(9,9) = 0.01;
   process_noise_m(10,10) = 0.01;
   process_noise_m(11,11) = 0.02;
-  process_noise_m(12,12) = 0.5;//Ax
-  process_noise_m(13,13) = 0.5;//Ay
-  process_noise_m(14,14) = 0.8;//Az
+  process_noise_m(12,12) = 0.01;//Ax
+  process_noise_m(13,13) = 0.01;//Ay
+  process_noise_m(14,14) = 0.01;//Az
   process_noise_m(15,15) = 0.5;
   process_noise_m(16,16) = 0.6;
   process_noise_m(17,17) = 0.4;

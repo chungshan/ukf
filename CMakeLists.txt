@@ -136,6 +136,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/UKF_node.cpp)
 add_executable(ukf_estimate src/ukf_estimate.cpp)
+add_executable(payload src/payload.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -153,6 +154,9 @@ add_executable(ukf_estimate src/ukf_estimate.cpp)
  target_link_libraries(ukf_estimate
    ${catkin_LIBRARIES}
  )
+target_link_libraries(payload
+  ${catkin_LIBRARIES}
+)
 #############
 ## Install ##
 #############
