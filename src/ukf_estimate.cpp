@@ -776,11 +776,13 @@ void correct(){
     output.force.z = state_[StateMemberFz];
     //output.thrust.y = state_[StateMemberAz];
     float angle = atan2(state_[StateMemberFz],state_[StateMemberFx]) * 180 / 3.1415926;
+    /*
     if (angle > -180 && angle < -90){
     angle += 90;
     }
+    */
     output.theta.x = angle;
-    ROS_INFO("theta_c = %f", angle);
+    //ROS_INFO("theta_c = %f", angle);
 
 /*
     if(abs(output.force.x) > 0.3){
@@ -850,7 +852,7 @@ void predict(const double referenceTime, const double delta)
   //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
-  float k_drag_z = 0.22;
+  float k_drag_z = 0;
 
 
 
@@ -1045,7 +1047,7 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(13,13) = 0.5;//Ay
   process_noise_m(14,14) = 0.8;//Az
   process_noise_m(15,15) = 0.5;
-  process_noise_m(16,16) = 0.6;
+  process_noise_m(16,16) = 0.8;
   process_noise_m(17,17) = 0.4;
   process_noise_m(18,18) = 0.01;
 

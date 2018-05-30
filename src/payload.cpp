@@ -45,7 +45,7 @@ struct Measurement
 Measurement measurement;
 
 // Global variable
-const int STATE_SIZE = 22;
+const int STATE_SIZE = 27;
 Eigen::VectorXd state_(STATE_SIZE); //x
 Eigen::MatrixXd weightedCovarSqrt_(STATE_SIZE,STATE_SIZE); // square root of (L+lamda)*P_k-1
 Eigen::MatrixXd estimateErrorCovariance_(STATE_SIZE,STATE_SIZE); // P_k-1
@@ -58,7 +58,7 @@ bool uncorrected_;
 int flag;
 int flag2;
 int flag3;
-float imu_pitch, imu_yaw, imu_roll;
+float payload_pitch, payload_yaw, payload_roll;
 float thrust;
 float a_g;
 float imu_ax_bias;
@@ -70,25 +70,30 @@ float imu_ay_bias;
 
 enum StateMembers
 {
-  StateMemberX = 0,
-  StateMemberY,
-  StateMemberZ,
-  StateMemberRoll,
-  StateMemberPitch,
-  StateMemberYaw,
-  StateMemberVx,
-  StateMemberVy,
-  StateMemberVz,
-  StateMemberVroll,
-  StateMemberVpitch,
-  StateMemberVyaw,
-  StateMemberAx,
-  StateMemberAy,
-  StateMemberAz,
-  StateMemberFx,
-  StateMemberFy,
-  StateMemberFz,
-  StateMemberThrust,
+  x_c = 0,
+  y_c,
+  z_c,
+  Vx_c,
+  Vy_c,
+  Vz_c,
+  pitch_c,
+  yaw_c,
+  roll_c,
+  Vpitch_c,
+  Vyaw_c,
+  Vroll_c,
+  pitch_p,
+  yaw_p,
+  roll_p,
+  Fx_f,
+  Fy_f,
+  Fz_f,
+  Fx_l,
+  Fy_l,
+  Fz_l,
+  Ax_f,
+  Ay_f,
+  Az_f,
   a_g_x,
   a_g_y,
   a_g_z
@@ -166,25 +171,34 @@ void initialize(){
   }
 */
   // Initialize Px,P_k-1
-  estimateErrorCovariance_(0,0) = 1e-02;// x
-  estimateErrorCovariance_(1,1) = 1e-02;// y
-  estimateErrorCovariance_(2,2) = 1e-02;// z
-  estimateErrorCovariance_(3,3) = 1e-06;// roll
-  estimateErrorCovariance_(4,4) = 1e-06;// pitch
-  estimateErrorCovariance_(5,5) = 1e-06;// yaw
-  estimateErrorCovariance_(6,6) = 1e-06;// Vx
-  estimateErrorCovariance_(7,7) = 1e-06;// Vy
-  estimateErrorCovariance_(8,8) = 1e-06;// Vz
-  estimateErrorCovariance_(9,9) = 1e-06;// Vroll
-  estimateErrorCovariance_(10,10) = 1e-06;// Vpitch
-  estimateErrorCovariance_(11,11) = 1e-06;// Vyaw
-  estimateErrorCovariance_(12,12) = 1e-02;// Ax
-  estimateErrorCovariance_(13,13) = 1e-02;// Ay
-  estimateErrorCovariance_(14,14) = 1e-02;// Az
-  estimateErrorCovariance_(15,15) = 1e-06;//Fx
-  estimateErrorCovariance_(16,16) = 1e-06;//Fy
-  estimateErrorCovariance_(17,17) = 1e-06;//Fz
-  estimateErrorCovariance_(18,18) = 1e-02;//Thrust
+  estimateErrorCovariance_(0,0) = 1e-02;// x_c
+  estimateErrorCovariance_(1,1) = 1e-02;// y_c
+  estimateErrorCovariance_(2,2) = 1e-02;// z_c
+  estimateErrorCovariance_(3,3) = 1e-06;// Vx_c
+  estimateErrorCovariance_(4,4) = 1e-06;// Vy_c
+  estimateErrorCovariance_(5,5) = 1e-06;// Vz_c
+  estimateErrorCovariance_(6,6) = 1e-06;// pitch_c
+  estimateErrorCovariance_(7,7) = 1e-06;// yaw_c
+  estimateErrorCovariance_(8,8) = 1e-06;// roll_c
+  estimateErrorCovariance_(9,9) = 1e-06;// Vpitch_c
+  estimateErrorCovariance_(10,10) = 1e-06;// Vyaw_c
+  estimateErrorCovariance_(11,11) = 1e-06;// Vroll_c
+  estimateErrorCovariance_(12,12) = 1e-02;// pitch_p
+  estimateErrorCovariance_(13,13) = 1e-02;// yaw_p
+  estimateErrorCovariance_(14,14) = 1e-02;// roll_p
+  estimateErrorCovariance_(15,15) = 1e-06;// Vpitch_p
+  estimateErrorCovariance_(16,16) = 1e-06;// Vyaw_p
+  estimateErrorCovariance_(17,17) = 1e-06;// Vroll_p
+  estimateErrorCovariance_(18,18) = 1e-02;//F_x_f
+  estimateErrorCovariance_(19,19) = 1e-06;//F_y_f
+  estimateErrorCovariance_(20,20) = 1e-06;//F_z_f
+  estimateErrorCovariance_(21,21) = 1e-06;//F_x_l
+  estimateErrorCovariance_(22,22) = 1e-06;//F_y_l
+  estimateErrorCovariance_(23,23) = 1e-06;//F_z_l
+  estimateErrorCovariance_(24,24) = 1e-06;//a_g_x
+  estimateErrorCovariance_(25,25) = 1e-06;//a_g_y
+  estimateErrorCovariance_(26,26) = 1e-06;//a_g_z
+
 /*
   //process noise
   for(int i = 0; i < 19; i++){
@@ -215,7 +229,6 @@ void initialize(){
 
   // Initialize state by using first measurement x_0
   state_.setZero();
-  state_[StateMemberThrust] = 0.6*a_g;
 
   uncorrected_ = false;
 
@@ -240,105 +253,12 @@ double clamRotation(double rotation)
   }
 
   return rotation;
+
 }
 
-void quaternionToRPY(){
-  /*
-  imu_data.orientation.x = 0.1;
-  imu_data.orientation.y = 0.05;
-  imu_data.orientation.z = 0.1;
-  imu_data.orientation.w = 1;*/
-   //imu orientation
-  if(imu_data.orientation.w == 0)
-  {
-    imu_data.orientation.w = 1;
-    flag = 0;
-  }
-  if(imu_data.orientation.w != 0 && imu_data.orientation.w != 1)
-    flag = 1;
-  //ROS_INFO("imu.x = %f", imu_data.orientation.x);
-
-  //ROS_INFO("flag = %d", flag);
-  //ROS_INFO("imu = %f", imu_data.orientation.w);
-  tf::Quaternion quat(imu_data.orientation.x, imu_data.orientation.y, imu_data.orientation.z, imu_data.orientation.w);
-
-  if(mocap_pose.pose.orientation.w == 0)
-  {
-    mocap_pose.pose.orientation.w = 1;
-    flag2 = 0;
-  }
-  if(mocap_pose.pose.orientation.w != 0 && mocap_pose.pose.orientation.w != 1)
-    flag2 = 1;
-
-  if(vfr_data.throttle == 0)
-  {
-    flag3 = 0;
-  }
-  if(vfr_data.throttle !=0)
-  {
-    flag3 = 1;
-  }
-  //ROS_INFO("imu.x = %f", imu_data.orientation.x);
-
-  //ROS_INFO("flag = %d", flag);
-  //ROS_INFO("imu = %f", imu_data.orientation.w);
-  tf::Quaternion quat1(mocap_pose.pose.orientation.x, mocap_pose.pose.orientation.y, mocap_pose.pose.orientation.z, mocap_pose.pose.orientation.w);
-
-  double roll, pitch, yaw;
-  double roll_mocap, pitch_mocap, yaw_mocap;
-  tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-  tf::Matrix3x3(quat1).getRPY(roll_mocap, pitch_mocap, yaw_mocap);
-
-  geometry_msgs::Vector3 rpy;
-  geometry_msgs::Vector3 rpy_mocap;
-  rpy.x = roll;
-  rpy.y = pitch;
-  rpy.z = yaw;
-
-  rpy_mocap.x = roll_mocap;
-  rpy_mocap.y = pitch_mocap;
-  rpy_mocap.z = yaw_mocap;
-
-  imu_roll = rpy.x;
-  imu_pitch = rpy.y;
-  imu_yaw = rpy.z;
-
-  state_[StateMemberRoll] = rpy_mocap.x;
-  state_[StateMemberPitch] = rpy_mocap.y;
-  state_[StateMemberYaw] = rpy_mocap.z;
-
-  /*
-  state_[StateMemberRoll] = 0;
-  state_[StateMemberPitch] = 0;
-  state_[StateMemberYaw] = 0;
-*/
-/*
-  state_[StateMemberAx] = 0;
-  state_[StateMemberAy] = 0;
-  state_[StateMemberAz] = 0;
-/*
-  state_[StateMemberAx] = imu_data.linear_acceleration.x;
-  state_[StateMemberAy] = imu_data.linear_acceleration.y;
-  state_[StateMemberAz] = (imu_data.linear_acceleration.z - 9.8);
-*/
-  //ROS_INFO("roll = %f, pitch = %f, yaw = %f", state_[StateMemberRoll],state_[StateMemberPitch],state_[StateMemberYaw]);
-/*
-  for (int i = 0; i < 19; i++){
-  printf("%f ", state_[i]);
-  }
-  printf("\n");
-*/
-}
 
 void writeInMeasurement(){
-  /*test
-  svo_pose.pose.pose.position.x = 0.1;
-  svo_pose.pose.pose.position.y = 0.2;
-  svo_pose.pose.pose.position.z = 0.3;
-  imu_data.linear_acceleration.x = 1.1;
-  imu_data.linear_acceleration.y = 0.0;
-  imu_data.linear_acceleration.z = 9.9 - 9.8;
-  test*/
+
   measurement.measurement_.resize(STATE_SIZE);
   float roll, pitch , yaw;
   //const float imu_ax_bias = -0.077781;
@@ -354,9 +274,10 @@ void writeInMeasurement(){
   a_g_inertial(0) = 0;
   a_g_inertial(1) = 0;
   a_g_inertial(2) = a_g;
-  roll = imu_roll;
-  pitch = imu_pitch;
-  yaw = imu_yaw;
+  //read payload attitude from topic
+  roll = payload_roll;
+  pitch = payload_pitch;
+  yaw = payload_yaw;
   Rx(0,0) = 1;
   Rx(1,0) = 0;
   Rx(2,0) = 0;
@@ -390,43 +311,36 @@ void writeInMeasurement(){
   a_g_body = Ry*Rx*Rz*a_g_inertial;
   //a_g_body(0) = (sin(yaw)*sin(roll) + cos(yaw)*sin(pitch)*cos(roll)) * 9.8;
   a_g_body(0) = sin(pitch)*cos(roll)*a_g;
-  measurement.measurement_[StateMemberX] = mocap_pose.pose.position.x ;
-  measurement.measurement_[StateMemberY] = mocap_pose.pose.position.y ;
-  measurement.measurement_[StateMemberZ] = mocap_pose.pose.position.z ;
+  /*
+  measurement.measurement_[x_c] = mocap_pose.pose.position.x ;
+  measurement.measurement_[y_c] = mocap_pose.pose.position.y ;
+  measurement.measurement_[z_c] = mocap_pose.pose.position.z ;
+*/
+  /*
+  measurement.measurement_[pitch_c] = ;
+  measurement.measurement_[yaw_c] = ;
+  measurement.measurement_[roll_c] = ;
+  */
+  /*
+  measurement.measurement_[pitch_p] = ;
+  measurement.measurement_[yaw_p] = ;
+  measurement.measurement_[roll_p] = ;
+  */
+  /*
+  measurement.measurement_[Fx_f] = ;
+  measurement.measurement_[Fy_f] = ;
+  measurement.measurement_[Fz_f] = ;
+  */
 
 /*
-  measurement.measurement_[StateMemberX] = 0 ;
-  measurement.measurement_[StateMemberY] = 0 ;
-  measurement.measurement_[StateMemberZ] = 0 ;
-*/
-
-  measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias + a_g_body(0));
-  measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
-  measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
-  //ROS_INFO("az = %f", state_[StateMemberAz]);
-
+  state_[Ax_f] = ;
+  state_[Ay_f] = ;
+  state_[Az_f] = ;
+  */
   state_[a_g_x] = a_g_body(0);
   state_[a_g_y] = a_g_body(1);
   state_[a_g_z] = -a_g_body(2);
 
-  /*
-  measurement.measurement_[StateMemberAx] = 0 ;
-  measurement.measurement_[StateMemberAy] = 0 ;
-  measurement.measurement_[StateMemberAz] = 0 ;
-*/
-
-  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*3*a_g + 0.6*a_g;
-
-
-  //output.thrust.x = state_[StateMemberThrust];
-
-  //output.thrust.z = -1;
-  //ROS_INFO("Thrust = %f", state_[StateMemberThrust]);
-/*
-  state_[StateMemberFx] = 0;
-  state_[StateMemberFy] = 0;
-  state_[StateMemberFz] = 0;
-*/
   //ROS_INFO("ax = %f", measurement.measurement_[StateMemberAz]);
   /*printf measurement_[i]
   for (int i = 0; i < 19 ; i++)
@@ -514,22 +428,28 @@ void correct(){
   stateToMeasurementSubset(3,3) = 0;
   stateToMeasurementSubset(4,4) = 0;
   stateToMeasurementSubset(5,5) = 0;
-  stateToMeasurementSubset(6,6) = 0;
-  stateToMeasurementSubset(7,7) = 0;
-  stateToMeasurementSubset(8,8) = 0;
+  stateToMeasurementSubset(6,6) = 1;
+  stateToMeasurementSubset(7,7) = 1;
+  stateToMeasurementSubset(8,8) = 1;
   stateToMeasurementSubset(9,9) = 0;
   stateToMeasurementSubset(10,10) = 0;
   stateToMeasurementSubset(11,11) = 0;
   stateToMeasurementSubset(12,12) = 1;
   stateToMeasurementSubset(13,13) = 1;
   stateToMeasurementSubset(14,14) = 1;
-  stateToMeasurementSubset(15,15) = 0;
-  stateToMeasurementSubset(16,16) = 0;
-  stateToMeasurementSubset(17,17) = 0;
+  stateToMeasurementSubset(15,15) = 1;
+  stateToMeasurementSubset(16,16) = 1;
+  stateToMeasurementSubset(17,17) = 1;
   stateToMeasurementSubset(18,18) = 0;
   stateToMeasurementSubset(19,19) = 0;
   stateToMeasurementSubset(20,20) = 0;
   stateToMeasurementSubset(21,21) = 0;
+  stateToMeasurementSubset(22,22) = 0;
+  stateToMeasurementSubset(23,23) = 0;
+  stateToMeasurementSubset(24,24) = 0;
+  stateToMeasurementSubset(25,25) = 0;
+  stateToMeasurementSubset(26,26) = 0;
+
 
 
   //The measurecovariance subset R
@@ -537,11 +457,16 @@ void correct(){
   measurementCovarianceSubset(0,0) = 0.2;
   measurementCovarianceSubset(1,1) = 0.2;
   measurementCovarianceSubset(2,2) = 0.2;
+  measurementCovarianceSubset(6,6) = 0.2;
+  measurementCovarianceSubset(7,7) = 0.2;
+  measurementCovarianceSubset(8,8) = 0.2;
   measurementCovarianceSubset(12,12) = 0.2;
   measurementCovarianceSubset(13,13) = 0.2;
   measurementCovarianceSubset(14,14) = 0.2;
-  measurementCovarianceSubset(18,18) = 0.2;
-  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(6,6) = measurementCovarianceSubset(7,7) = measurementCovarianceSubset(8,8) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(15,15) = measurementCovarianceSubset(16,16) = measurementCovarianceSubset(17,17) = measurementCovarianceSubset(19,19) = measurementCovarianceSubset(20,20) = measurementCovarianceSubset(21,21) = 0.4;
+  measurementCovarianceSubset(15,15) = 0.2;
+  measurementCovarianceSubset(16,16) = 0.2;
+  measurementCovarianceSubset(17,17) = 0.2;
+  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(18,18) = measurementCovarianceSubset(19,19) = measurementCovarianceSubset(20,20) = measurementCovarianceSubset(21,21) = measurementCovarianceSubset(22,22) =  measurementCovarianceSubset(23,23) = measurementCovarianceSubset(24,24) = measurementCovarianceSubset(25,25) = measurementCovarianceSubset(26,26) =0.4;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
@@ -577,6 +502,39 @@ void correct(){
     predictedMeasCovar.noalias() += covarWeights_[sigmaInd] * (sigmaDiff * sigmaDiff.transpose());//P_y_k~_y_k_~
     crossCovar.noalias() += covarWeights_[sigmaInd] * ((sigmaPoints_[sigmaInd] - state_) * sigmaDiff.transpose());//P_x_k_y_k
   }
+
+  //check p_yy
+  for (int i = 3; i < 12 ; i++){
+    for (int j = 0; j < 3 ; j++){
+      predictedMeasCovar(i,j) = 0;
+    }
+  }
+  for (int i = 0; i < 27; i++){
+    for (int j = 3; j < 12; j++){
+      predictedMeasCovar(i,j) = 0;
+    }
+  }
+  for (int i = 3; i < 12; i++){
+    for (int j = 12; j < 18; j++){
+      predictedMeasCovar(i,j) = 0;
+    }
+  }
+  for (int i = 0;i < 27; i++){
+    for (int j = 18; j < 27; j++){
+      predictedMeasCovar(i,j) = 0;
+    }
+  }
+  //check p_xy
+  for (int i = 0; i < 27; i++){
+    for (int j =3; j < 12; j++){
+      crossCovar(i,j) = 0;
+    }
+  }
+  for (int i = 0; i < 27; i++){
+    for (int j = 18; j <27; j++){
+      crossCovar(i,j) = 0;
+    }
+  }
   /*
   Eigen::MatrixXd crossCovar1(STATE_SIZE, updateSize);
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
@@ -591,63 +549,9 @@ void correct(){
 
   }
 */
-  //check p_y_k~_y_k_~ value
-  for (int i = 3; i < 19 ; i++){
-    for (int j = 0; j < 12 ; j++){
-      predictedMeasCovar(i,j) = 0;
-    }
-  }
-  for (int i = 0; i < 3;i++){
-    for (int j =3; j < 19 ; j++){
-      predictedMeasCovar(i,j) = 0;
-    }
-  }
-  for (int i = 12 ; i < 15 ; i++){
-    for(int j = 15 ; j < 19; j++){
-      predictedMeasCovar(i,j) = 0;
-    }
-  }
-  for (int i = 12; i < 19; i++){
-    for(int j = 15; j < 19; j++){
-      predictedMeasCovar(i,j) = 0;
-    }
-  }
-  for (int i = 15; i < 19; i++){
-    for (int j = 12; j < 15;j++)
-      predictedMeasCovar(i,j) = 0;
-  }
-  //Thrust
-
-    for(int j = 3; j < 13;j++){
-      predictedMeasCovar(18,j) = 0;
-    }
 
 
-    for(int j = 15; j < 19;j++){
-      predictedMeasCovar(18,j) = 0;
-    }
 
-
-    for(int i = 3; i < 13;i++){
-      predictedMeasCovar(i,18) = 0;
-    }
-
-
-    for(int i = 15; i < 19;i++){
-      predictedMeasCovar(i,18) = 0;
-    }
-
-  //check P_x_k_y_k value
-  for(int i = 0; i < 19; i++){
-    for(int j = 3; j < 12; j++){
-      crossCovar(i,j) = 0;
-    }
-  }
-  for(int i = 0; i < 19; i++){
-    for(int j = 15; j < 18; j++){
-      crossCovar(i,j) = 0;
-    }
-  }
 /*
   printf("---sigmaDiff of y---\n");
   for(int i = 0; i < 19; i++){
@@ -727,34 +631,34 @@ void correct(){
   printf("\n");
 */
   // Wrap angles in the innovation
-  while (innovationSubset(StateMemberRoll) < -PI)
+  while (innovationSubset(roll_p) < -PI)
    {
-   innovationSubset(StateMemberRoll) += TAU;
+   innovationSubset(roll_p) += TAU;
    }
 
-   while (innovationSubset(StateMemberRoll) > PI)
+   while (innovationSubset(roll_p) > PI)
    {
-    innovationSubset(StateMemberRoll) -= TAU;
+    innovationSubset(roll_p) -= TAU;
    }
 
-   while (innovationSubset(StateMemberYaw) < -PI)
+   while (innovationSubset(yaw_p) < -PI)
     {
-    innovationSubset(StateMemberYaw) += TAU;
+    innovationSubset(yaw_p) += TAU;
     }
 
-    while (innovationSubset(StateMemberYaw) > PI)
+    while (innovationSubset(yaw_p) > PI)
     {
-     innovationSubset(StateMemberYaw) -= TAU;
+     innovationSubset(yaw_p) -= TAU;
     }
 
-    while (innovationSubset(StateMemberPitch) < -PI)
+    while (innovationSubset(pitch_p) < -PI)
      {
-     innovationSubset(StateMemberPitch) += TAU;
+     innovationSubset(pitch_p) += TAU;
      }
 
-     while (innovationSubset(StateMemberPitch) > PI)
+     while (innovationSubset(pitch_p) > PI)
      {
-      innovationSubset(StateMemberPitch) -= TAU;
+      innovationSubset(pitch_p) -= TAU;
      }
      double sqMahalanobis = innovationSubset.dot(invInnovCov * innovationSubset);
      double threshold = 1 * 1;
@@ -771,16 +675,8 @@ void correct(){
     //ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
     //output data
-    output.force.x = state_[StateMemberFx];
-    output.force.y = state_[StateMemberFy];
-    output.force.z = state_[StateMemberFz];
+
     //output.thrust.y = state_[StateMemberAz];
-    float angle = atan2(state_[StateMemberFz],state_[StateMemberFx]) * 180 / 3.1415926;
-    if (angle > -180 && angle < -90){
-    angle += 90;
-    }
-    output.theta.x = angle;
-    ROS_INFO("theta_c = %f", angle);
 
 /*
     if(abs(output.force.x) > 0.3){
@@ -823,9 +719,9 @@ void correct(){
     printf("\n");
 */
     //wrapStateAngles();
-    state_(StateMemberRoll) = clamRotation(state_(StateMemberRoll));
-    state_(StateMemberYaw) = clamRotation(state_(StateMemberYaw));
-    state_(StateMemberPitch) = clamRotation(state_(StateMemberPitch));
+    state_(roll_p) = clamRotation(state_(roll_p));
+    state_(yaw_p) = clamRotation(state_(yaw_p));
+    state_(pitch_p) = clamRotation(state_(pitch_p));
 
     // Mark that we need to re-compute sigma points for successive corrections
     uncorrected_ = false;
@@ -854,9 +750,9 @@ void predict(const double referenceTime, const double delta)
 
 
 
-  double roll = state_(StateMemberRoll);
-  double pitch = state_(StateMemberPitch);
-  double yaw = state_(StateMemberYaw);
+  double roll = state_(roll_p);
+  double pitch = state_(pitch_p);
+  double yaw = state_(yaw_p);
 
   // We'll need these trig calculations a lot.
   double sp = ::sin(pitch);
@@ -876,179 +772,40 @@ void predict(const double referenceTime, const double delta)
 
   double syi = ::sin(-yaw);
   double cyi = ::cos(-yaw);
-  //ROS_INFO("sp = %f, cp = %f, sy = %f", sp , cp, sy);
-  // Prepare the transfer function Rz*Ry*Rx
-  //For constant acceleration
-  /*
-  transferFunction_(0,0) = transferFunction_(1,1) = transferFunction_(2,2) = transferFunction_(3,3) = transferFunction_(4,4) = transferFunction_(5,5) = transferFunction_(6,6) = transferFunction_(7,7) = transferFunction_(8,8) = transferFunction_(9,9) = transferFunction_(10,10) = transferFunction_(11,11) = transferFunction_(12,12) = transferFunction_(13,13) = transferFunction_(14,14) = transferFunction_(18,18) = 1;
-  //X,Y,Z prediction
-  transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
-  transferFunction_(StateMemberX, StateMemberVy) = (cy * sp * sr - sy * cr) * delta;
-  transferFunction_(StateMemberX, StateMemberVz) = (cy * sp * cr + sy * sr) * delta;
-  transferFunction_(StateMemberX, StateMemberAx) = 0.5 * transferFunction_(StateMemberX, StateMemberVx) * delta;
-  transferFunction_(StateMemberX, StateMemberAy) = 0.5 * transferFunction_(StateMemberX, StateMemberVy) * delta;
-  transferFunction_(StateMemberX, StateMemberAz) = 0.5 * transferFunction_(StateMemberX, StateMemberVz) * delta;
-  transferFunction_(StateMemberY, StateMemberVx) = sy * cp * delta;
-  transferFunction_(StateMemberY, StateMemberVy) = (sy * sp * sr + cy * cr) * delta;
-  transferFunction_(StateMemberY, StateMemberVz) = (sy * sp * cr - cy * sr) * delta;
-  transferFunction_(StateMemberY, StateMemberAx) = 0.5 * transferFunction_(StateMemberY, StateMemberVx) * delta;
-  transferFunction_(StateMemberY, StateMemberAy) = 0.5 * transferFunction_(StateMemberY, StateMemberVy) * delta;
-  transferFunction_(StateMemberY, StateMemberAz) = 0.5 * transferFunction_(StateMemberY, StateMemberVz) * delta;
-  transferFunction_(StateMemberZ, StateMemberVx) = -sp * delta;
-  transferFunction_(StateMemberZ, StateMemberVy) = cp * sr * delta;
-  transferFunction_(StateMemberZ, StateMemberVz) = cp * cr * delta;
-  transferFunction_(StateMemberZ, StateMemberAx) = 0.5 * transferFunction_(StateMemberZ, StateMemberVx) * delta;
-  transferFunction_(StateMemberZ, StateMemberAy) = 0.5 * transferFunction_(StateMemberZ, StateMemberVy) * delta;
-  transferFunction_(StateMemberZ, StateMemberAz) = 0.5 * transferFunction_(StateMemberZ, StateMemberVz) * delta;
-  //angle prediction
-  transferFunction_(StateMemberRoll, StateMemberVroll) = transferFunction_(StateMemberX, StateMemberVx);
-  transferFunction_(StateMemberRoll, StateMemberVpitch) = transferFunction_(StateMemberX, StateMemberVy);
-  transferFunction_(StateMemberRoll, StateMemberVyaw) = transferFunction_(StateMemberX, StateMemberVz);
-  transferFunction_(StateMemberPitch, StateMemberVroll) = transferFunction_(StateMemberY, StateMemberVx);
-  transferFunction_(StateMemberPitch, StateMemberVpitch) = transferFunction_(StateMemberY, StateMemberVy);
-  transferFunction_(StateMemberPitch, StateMemberVyaw) = transferFunction_(StateMemberY, StateMemberVz);
-  transferFunction_(StateMemberYaw, StateMemberVroll) = transferFunction_(StateMemberZ, StateMemberVx);
-  transferFunction_(StateMemberYaw, StateMemberVpitch) = transferFunction_(StateMemberZ, StateMemberVy);
-  transferFunction_(StateMemberYaw, StateMemberVyaw) = transferFunction_(StateMemberZ, StateMemberVz);
-  //Velocity prediction
-  transferFunction_(StateMemberVx, StateMemberAx) = delta;
-  transferFunction_(StateMemberVy, StateMemberAy) = delta;
-  transferFunction_(StateMemberVz, StateMemberAz) = delta;
-  */
-  //Force prediction(follower)
-
-  transferFunction_(StateMemberFx,StateMemberAx) = m*cy * cp;
-  transferFunction_(StateMemberFx,StateMemberAy) = m*(cy * sp * sr - sy * cr);
-  transferFunction_(StateMemberFx,StateMemberAz) = m*(cy * sp * cr + sy * sr);
-  transferFunction_(StateMemberFy,StateMemberAx) = m*sy * cp;
-  transferFunction_(StateMemberFy,StateMemberAy) = m*(sy * sp * sr + cy * cr);
-  transferFunction_(StateMemberFy,StateMemberAz) = m*(sy * sp * cr - cy * sr);
-  transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
-  transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
-  transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr;
-  //Thrust
-  transferFunction_(StateMemberFx,StateMemberThrust) = -1*(cy * sp * cr + sy * sr);
-  transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
-  transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
-  //drag force
-  transferFunction_(StateMemberFx,StateMemberVx) = k_drag_x*cy * cp;
-  transferFunction_(StateMemberFx,StateMemberVy) = k_drag_y*(cy * sp * sr - sy * cr);
-  transferFunction_(StateMemberFx,StateMemberVz) = k_drag_z*(cy * sp * cr + sy * sr);
-  transferFunction_(StateMemberFy,StateMemberVx) = k_drag_x*sy * cp ;
-  transferFunction_(StateMemberFy,StateMemberVy) = k_drag_y*(sy * sp * sr + cy * cr);
-  transferFunction_(StateMemberFy,StateMemberVz) = k_drag_z*(sy * sp * cr - cy * sr);
-  transferFunction_(StateMemberFz,StateMemberVx) = k_drag_x*(-sp) ;
-  transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
-  transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
-
-
-  //X,Y,Z prediction
-  transferFunction_(StateMemberX,StateMemberX) = 1;
-  transferFunction_(StateMemberY,StateMemberY) = 1;
-  transferFunction_(StateMemberZ,StateMemberZ) = 1;
-  transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
-  transferFunction_(StateMemberX, StateMemberVy) = (cy * sp * sr - sy * cr) * delta;
-  transferFunction_(StateMemberX, StateMemberVz) = (cy * sp * cr + sy * sr) * delta;
-  //transferFunction_(StateMemberX, StateMemberAx) = 0.5 * transferFunction_(StateMemberX, StateMemberVx) * delta;
-  //transferFunction_(StateMemberX, StateMemberAy) = 0.5 * transferFunction_(StateMemberX, StateMemberVy) * delta;
-  //transferFunction_(StateMemberX, StateMemberAz) = 0.5 * transferFunction_(StateMemberX, StateMemberVz) * delta;
-  transferFunction_(StateMemberY, StateMemberVx) = sy * cp * delta;
-  transferFunction_(StateMemberY, StateMemberVy) = (sy * sp * sr + cy * cr) * delta;
-  transferFunction_(StateMemberY, StateMemberVz) = (sy * sp * cr - cy * sr) * delta;
-  //transferFunction_(StateMemberY, StateMemberAx) = 0.5 * transferFunction_(StateMemberY, StateMemberVx) * delta;
-  //transferFunction_(StateMemberY, StateMemberAy) = 0.5 * transferFunction_(StateMemberY, StateMemberVy) * delta;
-  //transferFunction_(StateMemberY, StateMemberAz) = 0.5 * transferFunction_(StateMemberY, StateMemberVz) * delta;
-  transferFunction_(StateMemberZ, StateMemberVx) = -sp * delta;
-  transferFunction_(StateMemberZ, StateMemberVy) = cp * sr * delta;
-  transferFunction_(StateMemberZ, StateMemberVz) = cp * cr * delta;
-  //transferFunction_(StateMemberZ, StateMemberAx) = 0.5 * transferFunction_(StateMemberZ, StateMemberVx) * delta;
-  //transferFunction_(StateMemberZ, StateMemberAy) = 0.5 * transferFunction_(StateMemberZ, StateMemberVy) * delta;
-  //transferFunction_(StateMemberZ, StateMemberAz) = 0.5 * transferFunction_(StateMemberZ, StateMemberVz) * delta;
-
-  //Velocity prediction
-  transferFunction_(StateMemberVx,StateMemberVx) = 1 - k_drag_x * delta;
-  transferFunction_(StateMemberVy,StateMemberVy) = 1 - k_drag_y * delta;
-  transferFunction_(StateMemberVz,StateMemberVz) = 1 - k_drag_z * delta;
-
-  transferFunction_(StateMemberVz,StateMemberThrust) = 1 * delta;
-
-  transferFunction_(StateMemberVx,StateMemberFx) = (1/m) * cyi * cpi* delta;
-  transferFunction_(StateMemberVx,StateMemberFy) = (1/m) * (cyi * spi * sri - syi * cri) * delta;
-  transferFunction_(StateMemberVx,StateMemberFz) = (1/m) * (cyi * spi * cri + syi * sri) * delta;
-
-  transferFunction_(StateMemberVy,StateMemberFx) = (1/m) * syi * cpi * delta;
-  transferFunction_(StateMemberVy,StateMemberFy) = (1/m) * (syi * spi * sri + cyi * cri) * delta;
-  transferFunction_(StateMemberVy,StateMemberFz) = (1/m) * (syi * spi * cri - cyi * sri) * delta;
-
-  transferFunction_(StateMemberVz,StateMemberFx) = (1/m) * (-spi) * delta;
-  transferFunction_(StateMemberVz,StateMemberFy) = (1/m) * (cpi * sri) * delta;
-  transferFunction_(StateMemberVz,StateMemberFz) = (1/m) * (cpi * cri) * delta;
-
-  transferFunction_(StateMemberVx,a_g_x) = 1 * delta;
-  transferFunction_(StateMemberVy,a_g_y) = 1 * delta;
-  transferFunction_(StateMemberVz,a_g_z) = 1 * delta;
-  //force prediction
-/*
-  transferFunction_(StateMemberFx,StateMemberFx) = 1;
-  transferFunction_(StateMemberFy,StateMemberFy) = 1;
-  transferFunction_(StateMemberFz,StateMemberFz) = 1;
-*/
-
-  transferFunction_(StateMemberAx,StateMemberAx) = 1;
-  transferFunction_(StateMemberAy,StateMemberAy) = 1;
-  transferFunction_(StateMemberAz,StateMemberAz) = 1;
-  //acceleration predict
-  /*
-  transferFunction_(StateMemberAx,StateMemberVx) = k_drag_x * delta;
-  transferFunction_(StateMemberAy,StateMemberVy) = k_drag_y * delta;
-  transferFunction_(StateMemberAz,StateMemberVz) = k_drag_z * delta;
-
-  transferFunction_(StateMemberAz,StateMemberThrust) = 1 * delta;
-
-  transferFunction_(StateMemberAx,StateMemberFx) = (1/m) * cyi * cpi* delta;
-  transferFunction_(StateMemberAx,StateMemberFy) = (1/m) * (cyi * spi * sri - syi * cri) * delta;
-  transferFunction_(StateMemberAx,StateMemberFz) = (1/m) * (cyi * spi * cri + syi * sri) * delta;
-
-  transferFunction_(StateMemberAy,StateMemberFx) = (1/m) * syi * cpi * delta;
-  transferFunction_(StateMemberAy,StateMemberFy) = (1/m) * (syi * spi * sri + cyi * cri) * delta;
-  transferFunction_(StateMemberAy,StateMemberFz) = (1/m) * (syi * spi * cri - cyi * sri) * delta;
-
-  transferFunction_(StateMemberAz,StateMemberFx) = (1/m) * (-spi) * delta;
-  transferFunction_(StateMemberAz,StateMemberFy) = (1/m) * (cpi * sri) * delta;
-  transferFunction_(StateMemberAz,StateMemberFz) = (1/m) * (cpi * cri) * delta;
-
-  transferFunction_(StateMemberAx,a_g_x) = 1 * delta;
-  transferFunction_(StateMemberAy,a_g_y) = 1 * delta;
-  transferFunction_(StateMemberAz,a_g_z) = 1 * delta;
-*/
+  //transfer function
 
 
 
 
 
 
-
-
-  process_noise_m(0,0) = 0.05;
-  process_noise_m(1,1) = 0.05;
-  process_noise_m(2,2) = 0.06;
-  process_noise_m(3,3) = 0.03;
-  process_noise_m(4,4) = 0.03;
-  process_noise_m(5,5) = 0.06;
-  process_noise_m(6,6) = 0.5;//Vx
-  process_noise_m(7,7) = 0.5;//Vy
-  process_noise_m(8,8) = 0.4;//Vz
-  process_noise_m(9,9) = 0.01;
-  process_noise_m(10,10) = 0.01;
-  process_noise_m(11,11) = 0.02;
-  process_noise_m(12,12) = 0.5;//Ax
-  process_noise_m(13,13) = 0.5;//Ay
-  process_noise_m(14,14) = 0.8;//Az
-  process_noise_m(15,15) = 0.5;
-  process_noise_m(16,16) = 0.6;
-  process_noise_m(17,17) = 0.4;
-  process_noise_m(18,18) = 0.01;
-
+  process_noise_m(0,0) = 0.05;//x_c
+  process_noise_m(1,1) = 0.05;//y_c
+  process_noise_m(2,2) = 0.06;//z_c
+  process_noise_m(3,3) = 0.3;//Vx_c
+  process_noise_m(4,4) = 0.3;//Vy_c
+  process_noise_m(5,5) = 0.6;//Vz_c
+  process_noise_m(6,6) = 0.05;//pitch_c
+  process_noise_m(7,7) = 0.05;//yaw_c
+  process_noise_m(8,8) = 0.04;//roll_c
+  process_noise_m(9,9) = 0.5;//Vpitch_c
+  process_noise_m(10,10) = 0.4;//Vyaw_c
+  process_noise_m(11,11) = 0.4;//Vroll_c
+  process_noise_m(12,12) = 0.05;//pitch_p
+  process_noise_m(13,13) = 0.05;//yaw_p
+  process_noise_m(14,14) = 0.08;//roll_p
+  process_noise_m(15,15) = 0.05;//Fx_f
+  process_noise_m(16,16) = 0.06;//Fy_f
+  process_noise_m(17,17) = 0.04;//Fz_f
+  process_noise_m(18,18) = 0.5;//Fx_l
+  process_noise_m(19,19) = 0.5;//Fy_l
+  process_noise_m(20,20) = 0.4;//Fz_l
+  process_noise_m(21,21) = 0.01;//Ax_f
+  process_noise_m(22,22) = 0.01;//Ay_f
+  process_noise_m(23,23) = 0.01;//Az_f
+  process_noise_m(24,24) = 0.01;//a_g_x
+  process_noise_m(25,25) = 0.01;//a_g_y
+  process_noise_m(26,26) = 0.01;//a_g_z
    //print transfer function
  /*
   printf("---transfer function---\n");
@@ -1152,8 +909,7 @@ printf("\n");
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
-  state_[StateMemberFz] = state_[StateMemberFz] + m * a_g;
-  //state_[StateMemberVz] = state_[StateMemberVz] + a_g * delta;
+
 
 /*
   printf("---state before adding noise---\n");
@@ -1163,12 +919,7 @@ printf("\n");
     }
     printf("\n");
 */
-  //state_ = state_ + process_noise;
-  /*
-  state_[StateMemberFx] = 0;
-  state_[StateMemberFy] = 0;
-  state_[StateMemberFz] = 0;
-  */
+
 /*
   printf("---state adding noise---\n");
 
@@ -1268,7 +1019,7 @@ int main(int argc, char **argv)
     //imu_data.header.stamp = ros::Time::now();
     //svo_pose.header.stamp = ros::Time::now();
 
-    quaternionToRPY();
+
 
 
     if(flag ==1 && flag2 ==1 && flag3 == 1)
