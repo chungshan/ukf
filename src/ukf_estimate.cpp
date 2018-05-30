@@ -8,7 +8,8 @@
 #include <mavros_msgs/VFR_HUD.h>
 #include <UKF/output.h>
 #include <std_msgs/Float64.h>
-
+#include <string>
+using namespace std;
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 geometry_msgs::PoseStamped mocap_pose;
 sensor_msgs::Imu imu_data;
@@ -58,7 +59,10 @@ int flag;
 int flag2;
 int flag3;
 float imu_pitch, imu_yaw, imu_roll;
-const float a_g = 9.807455;
+float thrust;
+float a_g;
+float imu_ax_bias;
+float imu_ay_bias;
 /*test variable*/
 
 
@@ -337,8 +341,8 @@ void writeInMeasurement(){
   test*/
   measurement.measurement_.resize(STATE_SIZE);
   float roll, pitch , yaw;
-  const float imu_ax_bias = -0.077781;
-  const float imu_ay_bias = 0.083215;
+  //const float imu_ax_bias = -0.077781;
+  //const float imu_ay_bias = 0.083215;
   Eigen::Matrix3f Rx, Ry, Rz;
   Eigen::Vector3f a_g_inertial;
   Eigen::Vector3f a_g_body;
@@ -771,8 +775,8 @@ void correct(){
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
     //output.thrust.y = state_[StateMemberAz];
-    //float angle = atan2(state_[StateMemberFx],state_[StateMemberFz]) * 180 / 3.1415926;
-    //ROS_INFO("theta_c = %f", angle);
+    float angle = atan2(state_[StateMemberFx],state_[StateMemberFz]) * 180 / 3.1415926;
+    ROS_INFO("theta_c = %f", angle);
 
 /*
     if(abs(output.force.x) > 0.3){
@@ -1236,11 +1240,21 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "ukf_estimate");
   ros::NodeHandle nh;
+  //get param
+  string topic_imu, topic_mocap, topic_thrust;
+  ros::param::get("~topic_imu", topic_imu);
+  ros::param::get("~topic_mocap", topic_mocap);
+  ros::param::get("~topic_thrust", topic_thrust);
+  ros::param::get("~g", a_g);
+  ros::param::get("~thrust", thrust);
+  ros::param::get("~imu_bias_x", imu_ax_bias);
+  ros::param::get("~imu_bias_y", imu_ay_bias);
+
   //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
-  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 10, mocap_cb);
-  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone1/mavros/imu/data", 10, imu_cb);
-  ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>("/drone1/mavros/vfr_hud", 10, vfr_cb);
-  ros::Publisher output_pub = nh.advertise<UKF::output>("/output",10);
+  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
+  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
+  ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
+  ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
   initialize();
   int count = 0;
   ros::Rate rate(50);
