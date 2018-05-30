@@ -775,7 +775,7 @@ void correct(){
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
     //output.thrust.y = state_[StateMemberAz];
-    float angle = atan2(state_[StateMemberFx],state_[StateMemberFz]) * 180 / 3.1415926;
+    float angle = atan2(state_[StateMemberFz],state_[StateMemberFx]) * 180 / 3.1415926;
     if (angle > -180 && angle < -90){
     angle += 90;
     }
