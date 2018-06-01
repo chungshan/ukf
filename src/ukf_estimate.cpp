@@ -1044,8 +1044,8 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(10,10) = 0.01;
   process_noise_m(11,11) = 0.02;
   process_noise_m(12,12) = 0.5;//Ax
-  process_noise_m(13,13) = 0.5;//Ay
-  process_noise_m(14,14) = 0.8;//Az
+  process_noise_m(13,13) = 0.8;//Ay
+  process_noise_m(14,14) = 0.5;//Az
   process_noise_m(15,15) = 0.5;
   process_noise_m(16,16) = 0.8;
   process_noise_m(17,17) = 0.4;
