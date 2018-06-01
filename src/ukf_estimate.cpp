@@ -9,6 +9,8 @@
 #include <UKF/output.h>
 #include <std_msgs/Float64.h>
 #include <string>
+#include <iostream>
+
 using namespace std;
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 geometry_msgs::PoseStamped mocap_pose;
@@ -121,6 +123,7 @@ void initialize(){
   imu_data.linear_acceleration.z = 9.9;
   */
   /*test variable*/
+
   double alpha = 1e-3;
   double kappa = 0;
   double beta = 2;
@@ -185,21 +188,11 @@ void initialize(){
   estimateErrorCovariance_(16,16) = 1e-06;//Fy
   estimateErrorCovariance_(17,17) = 1e-06;//Fz
   estimateErrorCovariance_(18,18) = 1e-02;//Thrust
-/*
-  //process noise
-  for(int i = 0; i < 19; i++){
-    process_noise[i] = 0.0001;
-  }
 
-
-
-  process_noise[6] = 0.005;
-  process_noise[7] = 0.005;
-  process_noise[8] = 0.005;
-*/
-
-
-
+  /*
+  std::cout << "---Intial state covariance---" << std::endl;
+  std::cout << estimateErrorCovariance_ << std::endl;
+  */
 
 /*
   for (int i = 0; i < 19; i++){
