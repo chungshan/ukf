@@ -1046,8 +1046,8 @@ int main(int argc, char **argv)
 
 
   //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
-  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 2, mocap_cb);
-  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone1/mavros/imu/data", 2, imu_cb);
+  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/svo/pose_cam/0", 2, mocap_cb);
+  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone2/mavros/imu/data", 2, imu_cb);
   ros::Publisher output_pose_pub = nh.advertise<geometry_msgs::Vector3>("/output_pose", 10);
   initialize();
   int count = 0;

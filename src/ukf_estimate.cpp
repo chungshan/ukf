@@ -396,6 +396,9 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias + a_g_body(0));
   measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
   measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
+  output.Af.x = measurement.measurement_[StateMemberAx];
+  output.Af.y = measurement.measurement_[StateMemberAy];
+  output.Af.z = measurement.measurement_[StateMemberAz];
   //ROS_INFO("az = %f", state_[StateMemberAz]);
 
   state_[a_g_x] = a_g_body(0);
@@ -761,7 +764,7 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("x = %f, y = %f, z = %f ", state_[0], state_[1], state_[2]);
     //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
-    ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
+    //ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
     //output data
     output.force.x = state_[StateMemberFx];

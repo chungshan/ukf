@@ -15,8 +15,9 @@ geometry_msgs::PoseStamped mocap_pose;
 sensor_msgs::Imu imu_data;
 nav_msgs::Odometry filterd;
 mavros_msgs::VFR_HUD vfr_data;
-UKF::output output;
-
+UKF::output output_data;
+geometry_msgs::PoseStamped measure_data;
+/*
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
 }
@@ -32,6 +33,13 @@ void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
 void vfr_cb(const mavros_msgs::VFR_HUD::ConstPtr &msg){
   vfr_data = *msg;//test
 }
+*/
+void measure_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
+  measure_data = *msg;
+}
+void output_cb(const UKF::output::ConstPtr &msg){
+  output_data = *msg;
+}
 struct Measurement
 {
   // The measurement and its associated covariance
@@ -45,7 +53,7 @@ struct Measurement
 Measurement measurement;
 
 // Global variable
-const int STATE_SIZE = 27;
+const int STATE_SIZE = 28;
 Eigen::VectorXd state_(STATE_SIZE); //x
 Eigen::MatrixXd weightedCovarSqrt_(STATE_SIZE,STATE_SIZE); // square root of (L+lamda)*P_k-1
 Eigen::MatrixXd estimateErrorCovariance_(STATE_SIZE,STATE_SIZE); // P_k-1
@@ -96,7 +104,8 @@ enum StateMembers
   Az_f,
   a_g_x,
   a_g_y,
-  a_g_z
+  a_g_z,
+  Vpitch_p
 };
 
 bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
@@ -236,6 +245,8 @@ void initialize(){
 
 
 
+
+
 }
 
 double clamRotation(double rotation)
@@ -256,11 +267,17 @@ double clamRotation(double rotation)
 
 }
 
+void checkData(){
+  if(measure_data.pose.position.x != 0 && output_data.force.x != 0 && output_data.Af.x != 0){
+    flag = 1;
+  }
+}
 
 void writeInMeasurement(){
 
   measurement.measurement_.resize(STATE_SIZE);
   float roll, pitch , yaw;
+  float theta_c = 0;
   //const float imu_ax_bias = -0.077781;
   //const float imu_ay_bias = 0.083215;
   Eigen::Matrix3f Rx, Ry, Rz;
@@ -311,13 +328,15 @@ void writeInMeasurement(){
   a_g_body = Ry*Rx*Rz*a_g_inertial;
   //a_g_body(0) = (sin(yaw)*sin(roll) + cos(yaw)*sin(pitch)*cos(roll)) * 9.8;
   a_g_body(0) = sin(pitch)*cos(roll)*a_g;
+
+  measurement.measurement_[x_c] = measure_data.pose.position.x;
+  measurement.measurement_[y_c] = measure_data.pose.position.y;
+  measurement.measurement_[z_c] = measure_data.pose.position.z;
+
+  theta_c = atan2(output_data.force.z, output_data.force.x);
+
+  measurement.measurement_[pitch_c] = theta_c;
   /*
-  measurement.measurement_[x_c] = mocap_pose.pose.position.x ;
-  measurement.measurement_[y_c] = mocap_pose.pose.position.y ;
-  measurement.measurement_[z_c] = mocap_pose.pose.position.z ;
-*/
-  /*
-  measurement.measurement_[pitch_c] = ;
   measurement.measurement_[yaw_c] = ;
   measurement.measurement_[roll_c] = ;
   */
@@ -326,17 +345,19 @@ void writeInMeasurement(){
   measurement.measurement_[yaw_p] = ;
   measurement.measurement_[roll_p] = ;
   */
-  /*
-  measurement.measurement_[Fx_f] = ;
-  measurement.measurement_[Fy_f] = ;
-  measurement.measurement_[Fz_f] = ;
-  */
 
-/*
-  state_[Ax_f] = ;
-  state_[Ay_f] = ;
-  state_[Az_f] = ;
-  */
+  measurement.measurement_[Fx_f] = output_data.force.x;
+  measurement.measurement_[Fy_f] = output_data.force.y;
+  measurement.measurement_[Fz_f] = output_data.force.z;
+
+
+
+
+  state_[Ax_f] = output_data.Af.x;
+  state_[Ay_f] = output_data.Af.y;
+  state_[Az_f] = output_data.Af.z;
+  //ROS_INFO("Ax_f = %f, Ay_f = %f, Az_f = %f", state_[Ax_f], state_[Ay_f], state_[Az_f]);
+
   state_[a_g_x] = a_g_body(0);
   state_[a_g_y] = a_g_body(1);
   state_[a_g_z] = -a_g_body(2);
@@ -449,6 +470,7 @@ void correct(){
   stateToMeasurementSubset(24,24) = 0;
   stateToMeasurementSubset(25,25) = 0;
   stateToMeasurementSubset(26,26) = 0;
+  stateToMeasurementSubset(27,27) = 0;
 
 
 
@@ -466,7 +488,7 @@ void correct(){
   measurementCovarianceSubset(15,15) = 0.2;
   measurementCovarianceSubset(16,16) = 0.2;
   measurementCovarianceSubset(17,17) = 0.2;
-  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(18,18) = measurementCovarianceSubset(19,19) = measurementCovarianceSubset(20,20) = measurementCovarianceSubset(21,21) = measurementCovarianceSubset(22,22) =  measurementCovarianceSubset(23,23) = measurementCovarianceSubset(24,24) = measurementCovarianceSubset(25,25) = measurementCovarianceSubset(26,26) =0.4;
+  measurementCovarianceSubset(3,3) = measurementCovarianceSubset(4,4) = measurementCovarianceSubset(5,5) = measurementCovarianceSubset(9,9) = measurementCovarianceSubset(10,10) = measurementCovarianceSubset(11,11) = measurementCovarianceSubset(18,18) = measurementCovarianceSubset(19,19) = measurementCovarianceSubset(20,20) = measurementCovarianceSubset(21,21) = measurementCovarianceSubset(22,22) =  measurementCovarianceSubset(23,23) = measurementCovarianceSubset(24,24) = measurementCovarianceSubset(25,25) = measurementCovarianceSubset(26,26) = measurementCovarianceSubset(27,27) = 0.4;
 
   // (5) Generate sigma points, use them to generate a predicted measurement,y_k_hat-
   for (size_t sigmaInd = 0; sigmaInd < sigmaPoints_.size(); ++sigmaInd)
@@ -509,7 +531,7 @@ void correct(){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 0; i < 27; i++){
+  for (int i = 0; i < 28; i++){
     for (int j = 3; j < 12; j++){
       predictedMeasCovar(i,j) = 0;
     }
@@ -519,19 +541,19 @@ void correct(){
       predictedMeasCovar(i,j) = 0;
     }
   }
-  for (int i = 0;i < 27; i++){
-    for (int j = 18; j < 27; j++){
+  for (int i = 0;i < 28; i++){
+    for (int j = 18; j < 28; j++){
       predictedMeasCovar(i,j) = 0;
     }
   }
   //check p_xy
-  for (int i = 0; i < 27; i++){
+  for (int i = 0; i < 28; i++){
     for (int j =3; j < 12; j++){
       crossCovar(i,j) = 0;
     }
   }
-  for (int i = 0; i < 27; i++){
-    for (int j = 18; j <27; j++){
+  for (int i = 0; i < 28; i++){
+    for (int j = 18; j <28; j++){
       crossCovar(i,j) = 0;
     }
   }
@@ -670,13 +692,7 @@ void correct(){
   {
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
-    //ROS_INFO("x = %f, y = %f, z = %f ", state_[0], state_[1], state_[2]);
-    //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
-    //ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
-
-    //output data
-
-    //output.thrust.y = state_[StateMemberAz];
+    //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
 
 /*
     if(abs(output.force.x) > 0.3){
@@ -772,12 +788,53 @@ void predict(const double referenceTime, const double delta)
 
   double syi = ::sin(-yaw);
   double cyi = ::cos(-yaw);
+
+  double vpitch = state_[Vpitch_c];
+  //l
+  double l_x,l_z;
+  double r_cp;
+  double alpha_p = 0;
+  double theta_p = state_[pitch_p];
+  double theta_c = state_[pitch_c];
   //transfer function
 
+  //p_c_dot = v_c
+  transferFunction_(x_c,x_c) = transferFunction_(y_c,y_c) = transferFunction_(z_c,z_c) = 1;
+  transferFunction_(x_c,Vx_c) = cy * cp * delta;
+  transferFunction_(x_c,Vy_c) = (cy * sp * sr - sy * cr) * delta;
+  transferFunction_(x_c,Vz_c) = (cy * sp * cr + sy * sr) * delta;
+  transferFunction_(y_c,Vx_c) = sy * cp * delta;
+  transferFunction_(y_c,Vy_c) = (sy * sp * sr + cy * cr) * delta;
+  transferFunction_(y_c,Vz_c) = (sy * sp * cr - cy * sr) * delta;
+  transferFunction_(z_c,Vx_c) = -sp * delta;
+  transferFunction_(z_c,Vy_c) = cp * sr * delta;
+  transferFunction_(z_c,Vz_c) = cp * cr * delta;
 
+  //v_c_dot = a_c = a_f + ...
+  transferFunction_(Vx_c,Vx_c) = transferFunction_(Vy_c,Vy_c) = transferFunction_(Vz_c,Vz_c) = 1;
+  transferFunction_(Vx_c,Ax_f) = 1*delta;
+  transferFunction_(Vx_c,Vpitch_c) = vpitch*l_x*delta;
+  transferFunction_(Vz_c,Az_f) = 1*delta;
+  transferFunction_(Vz_c,Vpitch_c) = -1*vpitch*l_z*delta;
+  //theta_c_dot = omega_c
+  transferFunction_(pitch_c,pitch_c) = 1;
+  transferFunction_(pitch_c,Vpitch_c) = delta;
+  //omega_dot = 0
+  transferFunction_(Vpitch_c,Vpitch_c) = 1;
+  //theta_p_dot = omega_p
+  transferFunction_(pitch_p,pitch_p) = 1;
+  transferFunction_(pitch_p,Vpitch_p) = 1*delta;
+  //omeag_p_dot = alpha_p
+  transferFunction_(Vpitch_p,Vpitch_p) = 1 + vpitch*cos(theta_p);
+  transferFunction_(Vpitch_p,Fx_f) = 1/(r_cp*m_p)*sin(theta_p)*delta;
+  transferFunction_(Vpitch_p,Fx_l) = 1/(r_cp*m_p)*sin(theta_p)*delta;
+  transferFunction_(Vpitch_p,Ax_f) = -1*r_cp*delta;
+  transferFunction_(Vpitch_p,Vpitch_c) = -1*vpitch*sin(theta_c);
 
-
-
+  //F_l
+  transferFunction_(Fx_l,Fx_l) = 1;
+  transferFunction_(Fy_l,Fy_l) = 1;
+  transferFunction_(Fz_l,Fz_l) = 1;
 
   process_noise_m(0,0) = 0.05;//x_c
   process_noise_m(1,1) = 0.05;//y_c
@@ -996,38 +1053,34 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "payload");
   ros::NodeHandle nh;
   //get param
-  string topic_imu, topic_mocap, topic_thrust;
-  ros::param::get("~topic_imu", topic_imu);
-  ros::param::get("~topic_mocap", topic_mocap);
-  ros::param::get("~topic_thrust", topic_thrust);
-  ros::param::get("~g", a_g);
-  ros::param::get("~thrust", thrust);
-  ros::param::get("~imu_bias_x", imu_ax_bias);
-  ros::param::get("~imu_bias_y", imu_ay_bias);
+  string topic_measure;
+
 
   //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
-  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
-  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
-  ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
-  ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
+  //ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
+  //ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
+  //ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
+  //ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
+  ros::Subscriber measurement_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_measure, 2, measure_cb);
+  ros::Subscriber output_sub = nh.subscribe<UKF::output>("/output", 2, output_cb);
   initialize();
   int count = 0;
   ros::Rate rate(50);
   while(ros::ok()){
-    output.header.stamp = ros::Time::now();
+    //output_data.header.stamp = ros::Time::now();
 
     //imu_data.header.stamp = ros::Time::now();
     //svo_pose.header.stamp = ros::Time::now();
+    //measure_data.pose.position.x = 1;
+    checkData();
 
 
-
-
-    if(flag ==1 && flag2 ==1 && flag3 == 1)
+    if(flag == 1)
     {
     writeInMeasurement();
     predict(1,0.02);
     correct();
-    output_pub.publish(output);
+    //output_pub.publish(output);
     }
 
 
