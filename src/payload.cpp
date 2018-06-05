@@ -826,7 +826,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(Vx_c,Ax_f) = 1*delta;
   transferFunction_(Vx_c,Vpitch_c) = vpitch*l_x*delta;
   transferFunction_(Vz_c,Az_f) = 1*delta;
-  transferFunction_(Vz_c,Vpitch_c) = -1*vpitch*l_z*delta;
+  transferFunction_(Vz_c,Vpitch_c) = 1*vpitch*l_z*delta;
   //theta_c_dot = omega_c
   transferFunction_(pitch_c,pitch_c) = 1;
   transferFunction_(pitch_c,Vpitch_c) = delta;
