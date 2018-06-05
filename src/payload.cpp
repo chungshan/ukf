@@ -17,7 +17,7 @@ nav_msgs::Odometry filterd;
 mavros_msgs::VFR_HUD vfr_data;
 UKF::output output_data;
 geometry_msgs::PoseStamped measure_data;
-/*
+
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
 }
@@ -33,7 +33,7 @@ void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
 void vfr_cb(const mavros_msgs::VFR_HUD::ConstPtr &msg){
   vfr_data = *msg;//test
 }
-*/
+
 void measure_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
   measure_data = *msg;
 }
@@ -704,6 +704,7 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
     ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
+    ROS_INFO("w_c = %f", state_[Vpitch_c]);
 /*
     if(abs(output.force.x) > 0.3){
       ROS_INFO("Fx is larger than 0.3.");
@@ -801,7 +802,7 @@ void predict(const double referenceTime, const double delta)
 
   double vpitch = state_[Vpitch_c];
   //l
-  double l_x,l_z;
+  double l_x = measure_data.pose.position.x - mocap_pose.pose.position.x ,l_z = measure_data.pose.position.z - mocap_pose.pose.position.x;
   double r_cp;
   double alpha_p = 0;
   double theta_p = state_[pitch_p];
@@ -1063,11 +1064,12 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "payload");
   ros::NodeHandle nh;
   //get param
-  string topic_measure;
+  string topic_measure, topic_mocap;
 
   ros::param::get("~topic_measure", topic_measure);
+  ros::param::get("~topic_mocap", topic_mocap);
   //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
-  //ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
+  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
   //ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
   //ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
   //ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
