@@ -802,7 +802,7 @@ void predict(const double referenceTime, const double delta)
 
   double vpitch = state_[Vpitch_c];
   //l
-  double l_x = measure_data.pose.position.x - mocap_pose.pose.position.x ,l_z = measure_data.pose.position.z - mocap_pose.pose.position.x;
+  double l_x = measure_data.pose.position.x - mocap_pose.pose.position.x ,l_z = measure_data.pose.position.z - mocap_pose.pose.position.z;
   double r_cp;
   double alpha_p = 0;
   double theta_p = state_[pitch_p];
@@ -1069,7 +1069,7 @@ int main(int argc, char **argv)
   ros::param::get("~topic_measure", topic_measure);
   ros::param::get("~topic_mocap", topic_mocap);
   //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
-  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
+  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 1, mocap_cb);
   //ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
   //ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
   //ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
