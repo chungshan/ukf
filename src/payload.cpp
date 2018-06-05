@@ -332,7 +332,7 @@ void writeInMeasurement(){
   measurement.measurement_[x_c] = measure_data.pose.position.x;
   measurement.measurement_[y_c] = measure_data.pose.position.y;
   measurement.measurement_[z_c] = measure_data.pose.position.z;
-
+  //ROS_INFO("x_c = %f", measurement.measurement_[x_c]);
   theta_c = atan2(output_data.force.z, output_data.force.x);
 
   measurement.measurement_[pitch_c] = theta_c;
@@ -340,8 +340,18 @@ void writeInMeasurement(){
   measurement.measurement_[yaw_c] = ;
   measurement.measurement_[roll_c] = ;
   */
+  tf::Quaternion quat1(measure_data.pose.orientation.x, measure_data.pose.orientation.y, measure_data.pose.orientation.z, measure_data.pose.orientation.w);
+  double roll_mocap, pitch_mocap, yaw_mocap;
+  tf::Matrix3x3(quat1).getRPY(roll_mocap, pitch_mocap, yaw_mocap);
+
+  geometry_msgs::Vector3 rpy_mocap;
+  rpy_mocap.x = roll_mocap;
+  rpy_mocap.y = pitch_mocap;
+  rpy_mocap.z = yaw_mocap;
+
+  measurement.measurement_[pitch_p] = rpy_mocap.y;
+  //ROS_INFO("pitch_p = %f", measurement.measurement_[pitch_p]);
   /*
-  measurement.measurement_[pitch_p] = ;
   measurement.measurement_[yaw_p] = ;
   measurement.measurement_[roll_p] = ;
   */
@@ -693,7 +703,7 @@ void correct(){
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
-
+    ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
 /*
     if(abs(output.force.x) > 0.3){
       ROS_INFO("Fx is larger than 0.3.");
@@ -762,7 +772,7 @@ void predict(const double referenceTime, const double delta)
   //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
-  float k_drag_z = 0.22;
+  float k_drag_z = 0;
 
 
 
@@ -1055,14 +1065,14 @@ int main(int argc, char **argv)
   //get param
   string topic_measure;
 
-
+  ros::param::get("~topic_measure", topic_measure);
   //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
   //ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
   //ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
   //ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
   //ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
-  ros::Subscriber measurement_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_measure, 2, measure_cb);
-  ros::Subscriber output_sub = nh.subscribe<UKF::output>("/output", 2, output_cb);
+  ros::Subscriber measurement_sub = nh.subscribe<geometry_msgs::PoseStamped>( topic_measure, 1, measure_cb);
+  ros::Subscriber output_sub = nh.subscribe<UKF::output>("/output", 1, output_cb);
   initialize();
   int count = 0;
   ros::Rate rate(50);
@@ -1073,8 +1083,6 @@ int main(int argc, char **argv)
     //svo_pose.header.stamp = ros::Time::now();
     //measure_data.pose.position.x = 1;
     checkData();
-
-
     if(flag == 1)
     {
     writeInMeasurement();

@@ -10,7 +10,7 @@
     </node>
 
     <node pkg="UKF" name="ukf_payload" type="payload" output="screen" >
-        <param name="topic_measure" value="/tag" />
+        <param name="topic_measure" value="/vrpn_client_node/RigidBody1/pose" />
 
     </node>
 </launch>
