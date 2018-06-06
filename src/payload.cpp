@@ -16,7 +16,7 @@ sensor_msgs::Imu imu_data;
 nav_msgs::Odometry filterd;
 mavros_msgs::VFR_HUD vfr_data;
 UKF::output output_data;
-geometry_msgs::PoseStamped measure_data;
+geometry_msgs::PoseStamped measure_data, output_vc, output_omegac, output_leader;
 
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
@@ -557,13 +557,22 @@ void correct(){
 
 
   // (8.1) Check Mahalanobis distance of innovation
-  if (checkMahalanobisThreshold(innovationSubset, invInnovCov, measurement.mahalanobisThresh_))
-  {
+  //if (checkMahalanobisThreshold(innovationSubset, invInnovCov, measurement.mahalanobisThresh_))
+  //{
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
     ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
     ROS_INFO("w_c = %f", state_[Vpitch_c]);
+    output_vc.pose.position.x = state_[Vx_c];
+    output_vc.pose.position.y = state_[Vy_c];
+    output_vc.pose.position.z = state_[Vz_c];
+
+    output_omegac.pose.position.y = state_[Vpitch_c];
+
+    output_leader.pose.position.x = state_[Fx_l];
+    output_leader.pose.position.y = state_[Fy_l];
+    output_leader.pose.position.z = state_[Fz_l];
 
 
 
@@ -585,11 +594,11 @@ void correct(){
     measurement.mahalanobisThresh_ = 2;
     //ROS_INFO("---correct success!!---\n");
 
-  }
-  else{
+  //}
+  //else{
     measurement.mahalanobisThresh_ = 8;
     //ROS_INFO("---correct fail!!---\n");
-  }
+  //}
 
 
 }
@@ -599,7 +608,7 @@ void predict(const double referenceTime, const double delta)
   //ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(STATE_SIZE,STATE_SIZE);
   Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
-  double m = 0.6,m_p = 0.6;
+  double m = 1.2,m_p = 0.6;
   //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
@@ -630,13 +639,17 @@ void predict(const double referenceTime, const double delta)
   double syi = ::sin(-yaw);
   double cyi = ::cos(-yaw);
 
-  double vpitch = state_[Vpitch_c];
+  double vpitch_c = state_[Vpitch_c];
+  double vpitch_p = state_[Vpitch_p];
   //l
   double l_x = measure_data.pose.position.x - mocap_pose.pose.position.x ,l_z = measure_data.pose.position.z - mocap_pose.pose.position.z;
   double r_cp;
   double alpha_p = 0;
   double theta_p = state_[pitch_p];
   double theta_c = state_[pitch_c];
+
+  double theta_f = output_data.theta.y;
+  double theta_cf = theta_c - theta_f;
   //transfer function
 
   //p_c_dot = v_c
@@ -653,10 +666,12 @@ void predict(const double referenceTime, const double delta)
 
   //v_c_dot = a_c = a_f + ...
   transferFunction_(Vx_c,Vx_c) = transferFunction_(Vy_c,Vy_c) = transferFunction_(Vz_c,Vz_c) = 1;
-  transferFunction_(Vx_c,Ax_f) = 1*delta;
-  transferFunction_(Vx_c,Vpitch_c) = vpitch*l_x*delta;
-  transferFunction_(Vz_c,Az_f) = 1*delta;
-  transferFunction_(Vz_c,Vpitch_c) = 1*vpitch*l_z*delta;
+  transferFunction_(Vx_c,Ax_f) = cos(theta_f)*delta;
+  transferFunction_(Vx_c,Az_f) = sin(theta_f)*delta;
+  transferFunction_(Vx_c,Vpitch_c) = vpitch_c*l_x*delta;
+  transferFunction_(Vz_c,Ax_f) = -sin(theta_f)*delta;
+  transferFunction_(Vz_c,Az_f) = cos(theta_f)*delta;
+  transferFunction_(Vz_c,Vpitch_c) = 1*vpitch_c*l_z*delta;
   //theta_c_dot = omega_c
   transferFunction_(pitch_c,pitch_c) = 1;
   transferFunction_(pitch_c,Vpitch_c) = delta;
@@ -666,11 +681,12 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(pitch_p,pitch_p) = 1;
   transferFunction_(pitch_p,Vpitch_p) = 1*delta;
   //omeag_p_dot = alpha_p
-  transferFunction_(Vpitch_p,Vpitch_p) = 1 + vpitch*cos(theta_p);
-  transferFunction_(Vpitch_p,Fx_f) = 1/(r_cp*m_p)*sin(theta_p)*delta;
-  transferFunction_(Vpitch_p,Fx_l) = 1/(r_cp*m_p)*sin(theta_p)*delta;
-  transferFunction_(Vpitch_p,Ax_f) = -1*r_cp*delta;
-  transferFunction_(Vpitch_p,Vpitch_c) = -1*vpitch*sin(theta_c);
+  transferFunction_(Vpitch_p,Vpitch_p) = 1 + vpitch_p*delta;
+  transferFunction_(Vpitch_p,Fx_f) = 1/(r_cp*m_p)*delta;
+  transferFunction_(Vpitch_p,Fx_l) = 1/(r_cp*m_p)*delta;
+  transferFunction_(Vpitch_p,Ax_f) = -1*cos(theta_f)/r_cp*delta;
+  transferFunction_(Vpitch_p,Az_f) = -1*sin(theta_f)/r_cp*delta;
+  transferFunction_(Vpitch_p,Vpitch_c) = -1*vpitch_p*l_x;
 
   //F_l
   transferFunction_(Fx_l,Fx_l) = 1;
@@ -777,6 +793,9 @@ int main(int argc, char **argv)
   //ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
   ros::Subscriber measurement_sub = nh.subscribe<geometry_msgs::PoseStamped>( topic_measure, 1, measure_cb);
   ros::Subscriber output_sub = nh.subscribe<UKF::output>("/output", 1, output_cb);
+  ros::Publisher output_vc_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_vc", 10);
+  ros::Publisher output_omega_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_omegac", 10);
+  ros::Publisher output_leader_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_leader", 10);
   initialize();
   int count = 0;
   ros::Rate rate(50);
@@ -793,6 +812,9 @@ int main(int argc, char **argv)
     predict(1,0.02);
     correct();
     //output_pub.publish(output);
+    output_vc_pub.publish(output_vc);
+    output_omega_pub.publish(output_omegac);
+    output_leader_pub.publish(output_leader);
     }
 
 

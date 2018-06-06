@@ -296,6 +296,8 @@ void quaternionToRPY(){
   imu_pitch = rpy.y;
   imu_yaw = rpy.z;
 
+  output.theta.y = imu_pitch;
+
   state_[StateMemberRoll] = rpy_mocap.x;
   state_[StateMemberPitch] = rpy_mocap.y;
   state_[StateMemberYaw] = rpy_mocap.z;
@@ -844,7 +846,7 @@ void predict(const double referenceTime, const double delta)
   //ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(STATE_SIZE,STATE_SIZE);
   Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
-  double m = 0.6,m_p = 0.6;
+  double m = 1.2,m_p = 0.6;
   //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
