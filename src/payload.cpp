@@ -157,6 +157,7 @@ void initialize(){
   //const int STATE_SIZE = 19;
   float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 37(19 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
+  sigmaPoints_a.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
 
   //Prepare constants
   //lamda,
@@ -209,7 +210,7 @@ void initialize(){
   estimateErrorCovariance_(24,24) = 1e-06;//a_g_x
   estimateErrorCovariance_(25,25) = 1e-06;//a_g_y
   estimateErrorCovariance_(26,26) = 1e-06;//a_g_z
-
+  estimateErrorCovariance_(27,27) = 1e-06;
 
 
 
@@ -578,9 +579,9 @@ void correct(){
     // x = x + K*(y - y_hat)
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
-    ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
-    ROS_INFO("w_c = %f", state_[Vpitch_c]);
-    ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
+    //ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
+    //ROS_INFO("w_c = %f", state_[Vpitch_c]);
+    //ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
     output_vc.pose.position.x = state_[Vx_c];
     output_vc.pose.position.y = state_[Vy_c];
     output_vc.pose.position.z = state_[Vz_c];
@@ -622,7 +623,7 @@ void correct(){
 
 void predict(const double referenceTime, const double delta)
 {
-  //ROS_INFO("---Predict start---");
+  ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(STATE_SIZE,STATE_SIZE);
   Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
   double m = 1.2,m_p = 0.6;
@@ -646,22 +647,26 @@ void predict(const double referenceTime, const double delta)
   double vpitch_p = state_[Vpitch_p];
   //l
   double l_x = measure_data.pose.position.x - mocap_pose.pose.position.x ,l_z = measure_data.pose.position.z - mocap_pose.pose.position.z;//cable length
+
   double r_cp;
 
   double theta_p = state_[pitch_p];
-  double theta_c = state_[pitch_c];
+  double theta_c = measurement.measurement_[pitch_c];
 
   double theta_f_pitch = output_data.theta.y;
 
+  double I_p = 0.0;
 
 
-
-  double I_p = (1/12)*m_p*(0.04*0.04+0.3*0.3);
   double l = 0.3; // payload length
   double g = 9.8;
 
-  double theta_d = atan2(state_[Fz_l], state_[Fx_l]);; //leader force angle
+  double theta_d = atan2(state_[Fz_l], state_[Fx_l]);
+  //std::cout << theta_c << std::endl;
+  //leader force angle
   //transfer function
+
+  I_p = m_p*(0.04*0.04+0.3*0.3)/12;
 
   //p_c_dot = v_c
   transferFunction_(x_c,x_c) = transferFunction_(y_c,y_c) = transferFunction_(z_c,z_c) = 1;
@@ -688,18 +693,19 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(pitch_c,pitch_c) = 1;
   transferFunction_(pitch_c,Vpitch_c) = delta;
   //omega_dot = 0
-  transferFunction_(Vpitch_c,Vpitch_c) = 1;
+  //transferFunction_(Vpitch_c,Vpitch_c) = 1;
   //theta_p_dot = omega_p
   transferFunction_(pitch_p,pitch_p) = 1;
   transferFunction_(pitch_p,Vpitch_p) = 1*delta;
   //omeag_p_dot = alpha_p
+  /*
   transferFunction_(Vpitch_p,Vpitch_p) = 1 + vpitch_p*delta;
   transferFunction_(Vpitch_p,Fx_f) = 1/(r_cp*m_p)*delta;
   transferFunction_(Vpitch_p,Fx_l) = 1/(r_cp*m_p)*delta;
   transferFunction_(Vpitch_p,Ax_f) = -1*cos(theta_f_pitch)/r_cp*delta;
   transferFunction_(Vpitch_p,Az_f) = -1*sin(theta_f_pitch)/r_cp*delta;
   transferFunction_(Vpitch_p,Vpitch_c) = -1*vpitch_p*l_x;
-
+*/
   //F_l
   transferFunction_(Fx_l,Fx_l) = 1;
   transferFunction_(Fy_l,Fy_l) = 1;
@@ -732,7 +738,7 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(24,24) = 0.01;//a_g_x
   process_noise_m(25,25) = 0.01;//a_g_y
   process_noise_m(26,26) = 0.01;//a_g_z
-
+  process_noise_m(27,27) = 0.5;//V_pitch_p
   // (1) Take the square root of a small fraction of the estimateErrorCovariance_ using LL' decomposition
   // caculate square root of (L+lamda)*P_k-1
   // This will be a diagonal matrix (19*19)
@@ -759,14 +765,32 @@ void predict(const double referenceTime, const double delta)
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE] = transferFunction_ * (state_ - weightedCovarSqrt_.col(sigmaInd));
   }
   //generate sigma points
+  sigmaPoints_a[0] = state_;
   for (size_t sigmaInd = 0; sigmaInd < STATE_SIZE; ++sigmaInd)
   {
     sigmaPoints_a[sigmaInd + 1] = state_ + weightedCovarSqrt_.col(sigmaInd);
     sigmaPoints_a[sigmaInd + 1 + STATE_SIZE] = state_ - weightedCovarSqrt_.col(sigmaInd);
   }
+  /*
+  printf("---sigmaPoints---\n");
+    for (int i = 0; i < 57 ; i++){
+      for (int j = 0; j< 28 ; j++){
+        printf("%f ", sigmaPoints_a[i][j]);
+      }
+      printf("\n");
+    }
+  printf("\n");
+  */
   //v_c_dot = ...
+  sigmaPoints_a[0][Vx_c] = sigmaPoints_a[0][Vx_c] + ((1/m_p)*(sigmaPoints_a[0][Fx_f] + sigmaPoints_a[0][Fx_l]) - sigmaPoints_a[0][Vpitch_p]*sigmaPoints_a[0][Vpitch_p] * r_cp * cos(theta_p) - (1/I_p) * r_cp * cos(theta_p) * (-(0.5*l)*sin(theta_p+theta_d)*sqrt(sigmaPoints_a[0][Fx_l]*sigmaPoints_a[0][Fx_l]+sigmaPoints_a[0][Fz_l]*sigmaPoints_a[0][Fz_l]) + (0.5*l)*sin(theta_p+theta_c)*sqrt(sigmaPoints_a[0][Fx_f]*sigmaPoints_a[0][Fx_f]+sigmaPoints_a[0][Fz_f]*sigmaPoints_a[0][Fz_f])))*delta;
+  sigmaPoints_a[0][Vz_c] = sigmaPoints_a[0][Vz_c] + ((1/m_p)*(sigmaPoints_a[0][Fz_f] + sigmaPoints_a[0][Fz_l] - m_p * g) - sigmaPoints_a[0][Vpitch_p]*sigmaPoints_a[0][Vpitch_p] * r_cp * sin(theta_p) + (1/I_p) * r_cp * sin(theta_p) * (-(0.5*l)*sin(theta_p+theta_d)*sqrt(sigmaPoints_a[0][Fx_l]*sigmaPoints_a[0][Fx_l]+sigmaPoints_a[0][Fz_l]*sigmaPoints_a[0][Fz_l]) + (0.5*l)*sin(theta_p+theta_c)*sqrt(sigmaPoints_a[0][Fx_f]*sigmaPoints_a[0][Fx_f]+sigmaPoints_a[0][Fz_f]*sigmaPoints_a[0][Fz_f])))*delta;
+  //std::cout << sigmaPoints_a[0][Vx_c] << std::endl;
+  sigmaPoints_[0][Vx_c] = sigmaPoints_a[0][Vx_c];
+  sigmaPoints_[0][Vz_c] = sigmaPoints_a[0][Vz_c];
+
+
   for (size_t sigmaInd = 0; sigmaInd < STATE_SIZE; ++sigmaInd)
-  {
+  {    
     sigmaPoints_a[sigmaInd + 1][Vx_c] = sigmaPoints_a[sigmaInd + 1][Vx_c] + ((1/m_p)*(sigmaPoints_a[sigmaInd + 1][Fx_f] + sigmaPoints_a[sigmaInd + 1][Fx_l]) - sigmaPoints_a[sigmaInd + 1][Vpitch_p]*sigmaPoints_a[sigmaInd + 1][Vpitch_p] * r_cp * cos(theta_p) - (1/I_p) * r_cp * cos(theta_p) * (-(0.5*l)*sin(theta_p+theta_d)*sqrt(sigmaPoints_a[sigmaInd + 1][Fx_l]*sigmaPoints_a[sigmaInd + 1][Fx_l]+sigmaPoints_a[sigmaInd + 1][Fz_l]*sigmaPoints_a[sigmaInd + 1][Fz_l]) + (0.5*l)*sin(theta_p+theta_c)*sqrt(sigmaPoints_a[sigmaInd + 1][Fx_f]*sigmaPoints_a[sigmaInd + 1][Fx_f]+sigmaPoints_a[sigmaInd + 1][Fz_f]*sigmaPoints_a[sigmaInd + 1][Fz_f])))*delta;
     sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vx_c] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vx_c] + ((1/m_p)*(sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_f] + sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_l]) - sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] * r_cp * cos(theta_p) - (1/I_p) * r_cp * cos(theta_p) * (-(0.5*l)*sin(theta_p+theta_d)*sqrt(sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_l]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_l]+sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_l]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_l]) + (0.5*l)*sin(theta_p+theta_c)*sqrt(sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_f]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_f]+sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_f]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_f])))*delta;
     sigmaPoints_a[sigmaInd + 1][Vz_c] = sigmaPoints_a[sigmaInd + 1][Vz_c] + ((1/m_p)*(sigmaPoints_a[sigmaInd + 1][Fz_f] + sigmaPoints_a[sigmaInd + 1][Fz_l] - m_p * g) - sigmaPoints_a[sigmaInd + 1][Vpitch_p]*sigmaPoints_a[sigmaInd + 1][Vpitch_p] * r_cp * sin(theta_p) + (1/I_p) * r_cp * sin(theta_p) * (-(0.5*l)*sin(theta_p+theta_d)*sqrt(sigmaPoints_a[sigmaInd + 1][Fx_l]*sigmaPoints_a[sigmaInd + 1][Fx_l]+sigmaPoints_a[sigmaInd + 1][Fz_l]*sigmaPoints_a[sigmaInd + 1][Fz_l]) + (0.5*l)*sin(theta_p+theta_c)*sqrt(sigmaPoints_a[sigmaInd + 1][Fx_f]*sigmaPoints_a[sigmaInd + 1][Fx_f]+sigmaPoints_a[sigmaInd + 1][Fz_f]*sigmaPoints_a[sigmaInd + 1][Fz_f])))*delta;
@@ -777,11 +801,23 @@ void predict(const double referenceTime, const double delta)
     sigmaPoints_[sigmaInd + 1][Vz_c] = sigmaPoints_a[sigmaInd + 1][Vz_c];
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE][Vz_c] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vz_c];
   }
+  /*
+  for (int i = 0; i < 2*STATE_SIZE +1 ; i++){
+    printf("%f ", sigmaPoints_[i][Vx_c]);
+  }
+  */
 
   // omega_c_dot = ...
+  Eigen::Vector3d A_f_B , A_f_I;
+  A_f_B.setZero();
+  A_f_I.setZero();
+  A_f_B << sigmaPoints_a[0][Ax_f], sigmaPoints_a[0][Ay_f], sigmaPoints_a[0][Az_f];
+  A_f_I = R_B_I * A_f_B;
+  sigmaPoints_a[0][Vpitch_c] = sigmaPoints_a[0][Vpitch_c] + ((1/l_x) * ((1/m_p)*(sigmaPoints_a[0][Fx_f] + sigmaPoints_a[0][Fx_l]) - sigmaPoints_a[0][Vpitch_p]*sigmaPoints_a[0][Vpitch_p] * r_cp * cos(theta_p) - (1/I_p) * r_cp * cos(theta_p) * (-(0.5*l)*sin(theta_p+theta_d)*sqrt(sigmaPoints_a[0][Fx_l]*sigmaPoints_a[0][Fx_l]+sigmaPoints_a[0][Fz_l]*sigmaPoints_a[0][Fz_l]) + (0.5*l)*sin(theta_p+theta_c)*sqrt(sigmaPoints_a[0][Fx_f]*sigmaPoints_a[0][Fx_f]+sigmaPoints_a[0][Fz_f]*sigmaPoints_a[0][Fz_f])) - A_f_I(0) - sigmaPoints_a[0][Vpitch_p]*sigmaPoints_a[0][Vpitch_p]*l_x))*delta;
+  sigmaPoints_[0][Vpitch_c] = sigmaPoints_a[0][Vpitch_c];
   for (size_t sigmaInd = 0; sigmaInd < STATE_SIZE; ++sigmaInd)
   {
-    Eigen::Vector3d A_f_B , A_f_I;
+
     A_f_B.setZero();
     A_f_I.setZero();
     A_f_B << sigmaPoints_a[sigmaInd + 1][Ax_f], sigmaPoints_a[sigmaInd + 1][Ay_f], sigmaPoints_a[sigmaInd + 1][Az_f];
@@ -792,22 +828,52 @@ void predict(const double referenceTime, const double delta)
     sigmaPoints_[sigmaInd + 1][Vpitch_c] = sigmaPoints_a[sigmaInd + 1][Vpitch_c];
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE][Vpitch_c] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_c];
   }
+  /*
+  for (int i = 0; i < 2*STATE_SIZE +1 ; i++){
+    printf("%f ", sigmaPoints_[i][Vpitch_c]);
+  }
+  printf("\n");
+  */
 
   //omega_p_dot = ...
-  for (size_t sigmaInd = 0; sigmaInd < STATE_SIZE; ++sigmaInd){
     double Fl1,Fl2,Ff1,Ff2;
+    Fl1 = Fl2 = Ff1 = Ff2 = 0;
+    Ff1 = sqrt(sigmaPoints_a[0][Fx_f]*sigmaPoints_a[0][Fx_f] + sigmaPoints_a[0][Fz_f] * sigmaPoints_a[0][Fz_f]);
+    Fl1 = sqrt(sigmaPoints_a[0][Fx_l]*sigmaPoints_a[0][Fx_l] + sigmaPoints_a[0][Fz_l] * sigmaPoints_a[0][Fz_l]);
+    sigmaPoints_a[0][Vpitch_p] = sigmaPoints_a[0][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl1 + (0.5*l)*sin(theta_p+theta_c) * Ff1);
+    sigmaPoints_[0][Vpitch_p] = sigmaPoints_a[0][Vpitch_p];
+    std::cout << "---Vpitch_p---" << std::endl;
+    std::cout << sigmaPoints_[0][Vpitch_p] << std::endl;
+    std::cout << "---F_x_f---" << std::endl;
+    std::cout << sigmaPoints_[0][Fx_f] << std::endl;
+    std::cout << "---F_z_f---" << std::endl;
+    std::cout << sigmaPoints_[0][Fz_f] << std::endl;
+/*
+  for (size_t sigmaInd = 0; sigmaInd < STATE_SIZE; ++sigmaInd){
     Fl1 = Fl2 = Ff1 = Ff2 = 0;
     Ff1 = sqrt(sigmaPoints_a[sigmaInd + 1][Fx_f]*sigmaPoints_a[sigmaInd + 1][Fx_f] + sigmaPoints_a[sigmaInd + 1][Fz_f] * sigmaPoints_a[sigmaInd + 1][Fz_f]);
     Ff2 = sqrt(sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_f]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_f] + sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_f] * sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_f]);
     Fl1 = sqrt(sigmaPoints_a[sigmaInd + 1][Fx_l]*sigmaPoints_a[sigmaInd + 1][Fx_l] + sigmaPoints_a[sigmaInd + 1][Fz_l] * sigmaPoints_a[sigmaInd + 1][Fz_l]);
     Fl2 = sqrt(sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_l]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_l] + sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_l] * sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_l]);
-    sigmaPoints_a[sigmaInd + 1][Vpitch_p] = sigmaPoints_a[sigmaInd + 1][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl1 + (0.5*l)*sin(theta_p+theta_c));
-    sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl1 + (0.5*l)*sin(theta_p+theta_c));
+    sigmaPoints_a[sigmaInd + 1][Vpitch_p] = sigmaPoints_a[sigmaInd + 1][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl1 + (0.5*l)*sin(theta_p+theta_c) * Ff1);
+    sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl2 + (0.5*l)*sin(theta_p+theta_c) * Ff2);
 
     sigmaPoints_[sigmaInd + 1][Vpitch_p] = sigmaPoints_a[sigmaInd + 1][Vpitch_p];
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE][Vpitch_p] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p];
   }
-
+*/
+    /*
+  for (int i = 0; i < 2*STATE_SIZE +1 ; i++){
+    printf("%f ", sigmaPoints_[i][Vpitch_p]);
+  }
+  printf("\n");
+*/
+  /*
+  std::cout << "---sigmaPoints_a---" << std::endl;
+  for(int i=0 ; i< sigmaPoints_a.size();i++){
+     std::cout << sigmaPoints_a[i] << std::endl;
+  }
+*/
 
   // (3) Sum the weighted sigma points to generate a new state prediction
   // x_k_hat- = w_im * x_k|k-1
@@ -816,6 +882,7 @@ void predict(const double referenceTime, const double delta)
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
+
 
   // (4) Now us the sigma points and the predicted state to compute a predicted covariance P_k-
   estimateErrorCovariance_.setZero();
@@ -834,6 +901,7 @@ void predict(const double referenceTime, const double delta)
 
 // Mark that we can keep these sigma points
       uncorrected_ = true;
+      //ROS_INFO("predict ok!");
 
 
 }
