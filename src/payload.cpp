@@ -580,6 +580,7 @@ void correct(){
     //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
     ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
     ROS_INFO("w_c = %f", state_[Vpitch_c]);
+    ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
     output_vc.pose.position.x = state_[Vx_c];
     output_vc.pose.position.y = state_[Vy_c];
     output_vc.pose.position.z = state_[Vz_c];
@@ -626,11 +627,6 @@ void predict(const double referenceTime, const double delta)
   Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
   double m = 1.2,m_p = 0.6;
   //const int STATE_SIZE = 19;
-  float k_drag_x = 0.12;
-  float k_drag_y = 0.12;
-  float k_drag_z = 0;
-
-
 
   double roll = state_(roll_p);
   double pitch = state_(pitch_p);
@@ -646,36 +642,22 @@ void predict(const double referenceTime, const double delta)
   double sy = ::sin(yaw);
   double cy = ::cos(yaw);
 
-  double spi = ::sin(-pitch);
-  double cpi = ::cos(-pitch);
-
-  double sri = ::sin(-roll);
-  double cri = ::cos(-roll);
-
-  double syi = ::sin(-yaw);
-  double cyi = ::cos(-yaw);
-
   double vpitch_c = state_[Vpitch_c];
   double vpitch_p = state_[Vpitch_p];
   //l
   double l_x = measure_data.pose.position.x - mocap_pose.pose.position.x ,l_z = measure_data.pose.position.z - mocap_pose.pose.position.z;//cable length
   double r_cp;
-  double alpha_p = 0;
+
   double theta_p = state_[pitch_p];
   double theta_c = state_[pitch_c];
-  double theta_f_roll = output_data.theta.x;
-  double theta_f_pitch = output_data.theta.y;
-  double theta_f_yaw = output_data.theta.z;
-  double spf = sin(theta_f_pitch);
-  double cpf = cos(theta_f_pitch);
-  double srf = sin(theta_f_roll);
-  double crf = cos(theta_f_roll);
-  double syf = sin(theta_f_yaw);
-  double cyf = cos(theta_f_yaw);
 
-  double theta_cf = theta_c - theta_f_pitch;
-  double I_p;
-  double l; // payload length
+  double theta_f_pitch = output_data.theta.y;
+
+
+
+
+  double I_p = (1/12)*m_p*(0.04*0.04+0.3*0.3);
+  double l = 0.3; // payload length
   double g = 9.8;
 
   double theta_d = atan2(state_[Fz_l], state_[Fx_l]);; //leader force angle
@@ -892,9 +874,9 @@ int main(int argc, char **argv)
     predict(1,0.02);
     correct();
     //output_pub.publish(output);
-    output_vc_pub.publish(output_vc);
-    output_omega_pub.publish(output_omegac);
-    output_leader_pub.publish(output_leader);
+    //output_vc_pub.publish(output_vc);
+    //output_omega_pub.publish(output_omegac);
+    //output_leader_pub.publish(output_leader);
     }
 
 
