@@ -60,6 +60,7 @@ bool uncorrected_;
 int flag;
 int flag2;
 int flag3;
+int flag4;
 float imu_pitch, imu_yaw, imu_roll;
 float thrust;
 float a_g;
@@ -211,6 +212,7 @@ void initialize(){
   state_[StateMemberThrust] = 0.6*a_g;
 
   uncorrected_ = false;
+  flag4 = 0;
 
   measurement.mahalanobisThresh_ = 8;
 
@@ -242,13 +244,15 @@ void quaternionToRPY(){
   imu_data.orientation.z = 0.1;
   imu_data.orientation.w = 1;*/
    //imu orientation
+
   if(imu_data.orientation.w == 0)
   {
     imu_data.orientation.w = 1;
     flag = 0;
   }
-  if(imu_data.orientation.w != 0 && imu_data.orientation.w != 1)
+  if(imu_data.orientation.w != 0 && imu_data.orientation.w != 1){
     flag = 1;
+  }
   //ROS_INFO("imu.x = %f", imu_data.orientation.x);
 
   //ROS_INFO("flag = %d", flag);
@@ -278,6 +282,7 @@ void quaternionToRPY(){
   tf::Quaternion quat1(mocap_pose.pose.orientation.x, mocap_pose.pose.orientation.y, mocap_pose.pose.orientation.z, mocap_pose.pose.orientation.w);
 
   double roll, pitch, yaw;
+  double yaw_bias;
   double roll_mocap, pitch_mocap, yaw_mocap;
   tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
   tf::Matrix3x3(quat1).getRPY(roll_mocap, pitch_mocap, yaw_mocap);
@@ -291,10 +296,22 @@ void quaternionToRPY(){
   rpy_mocap.x = roll_mocap;
   rpy_mocap.y = pitch_mocap;
   rpy_mocap.z = yaw_mocap;
+  if(imu_data.orientation.w != 0 && imu_data.orientation.w != 1){
+    flag = 1;
+
+  }
 
   imu_roll = rpy.x;
   imu_pitch = rpy.y;
   imu_yaw = rpy.z;
+  /*
+  if(imu_yaw - yaw_bias < 0){
+    imu_yaw = imu_yaw - yaw_bias + 2*3.1415926;
+  }
+  else{
+    imu_yaw = imu_yaw - yaw_bias;
+  }
+  */
   output.theta.x = imu_roll;
   output.theta.y = imu_pitch;
   output.theta.z = imu_yaw;
