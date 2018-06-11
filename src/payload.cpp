@@ -338,11 +338,16 @@ void writeInMeasurement(){
   measurement.measurement_[roll_p] = ;
   */
 
+
   measurement.measurement_[Fx_f] = output_data.force.x;
   measurement.measurement_[Fy_f] = output_data.force.y;
   measurement.measurement_[Fz_f] = output_data.force.z;
 
-
+/*
+  state_[Fx_f] = output_data.force.x;
+  state_[Fy_f] = output_data.force.y;
+  state_[Fz_f] = output_data.force.z;
+*/
 
 
   state_[Ax_f] = output_data.Af.x;
@@ -580,8 +585,8 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
     //ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
-    //ROS_INFO("w_c = %f", state_[Vpitch_c]);
-    //ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
+    ROS_INFO("w_p = %f", state_[Vpitch_p]);
+    ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
     output_vc.pose.position.x = state_[Vx_c];
     output_vc.pose.position.y = state_[Vy_c];
     output_vc.pose.position.z = state_[Vz_c];
@@ -623,7 +628,7 @@ void correct(){
 
 void predict(const double referenceTime, const double delta)
 {
-  ROS_INFO("---Predict start---");
+  //ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(STATE_SIZE,STATE_SIZE);
   Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
   double m = 1.2,m_p = 0.6;
@@ -711,6 +716,10 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(Fy_l,Fy_l) = 1;
   transferFunction_(Fz_l,Fz_l) = 1;
 
+  transferFunction_(Fx_f,Fx_f) = 1;
+  transferFunction_(Fy_f,Fy_f) = 1;
+  transferFunction_(Fz_f,Fz_f) = 1;
+
   process_noise_m(0,0) = 0.05;//x_c
   process_noise_m(1,1) = 0.05;//y_c
   process_noise_m(2,2) = 0.06;//z_c
@@ -738,7 +747,7 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(24,24) = 0.01;//a_g_x
   process_noise_m(25,25) = 0.01;//a_g_y
   process_noise_m(26,26) = 0.01;//a_g_z
-  process_noise_m(27,27) = 0.5;//V_pitch_p
+  process_noise_m(27,27) = 1.5;//V_pitch_p
   // (1) Take the square root of a small fraction of the estimateErrorCovariance_ using LL' decomposition
   // caculate square root of (L+lamda)*P_k-1
   // This will be a diagonal matrix (19*19)
@@ -840,28 +849,25 @@ void predict(const double referenceTime, const double delta)
     Fl1 = Fl2 = Ff1 = Ff2 = 0;
     Ff1 = sqrt(sigmaPoints_a[0][Fx_f]*sigmaPoints_a[0][Fx_f] + sigmaPoints_a[0][Fz_f] * sigmaPoints_a[0][Fz_f]);
     Fl1 = sqrt(sigmaPoints_a[0][Fx_l]*sigmaPoints_a[0][Fx_l] + sigmaPoints_a[0][Fz_l] * sigmaPoints_a[0][Fz_l]);
-    sigmaPoints_a[0][Vpitch_p] = sigmaPoints_a[0][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl1 + (0.5*l)*sin(theta_p+theta_c) * Ff1);
+    sigmaPoints_a[0][Vpitch_p] = sigmaPoints_a[0][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl1 + (0.5*l)*sin(theta_p+theta_c) * Ff1) * delta;
     sigmaPoints_[0][Vpitch_p] = sigmaPoints_a[0][Vpitch_p];
+    /*
     std::cout << "---Vpitch_p---" << std::endl;
     std::cout << sigmaPoints_[0][Vpitch_p] << std::endl;
-    std::cout << "---F_x_f---" << std::endl;
-    std::cout << sigmaPoints_[0][Fx_f] << std::endl;
-    std::cout << "---F_z_f---" << std::endl;
-    std::cout << sigmaPoints_[0][Fz_f] << std::endl;
-/*
+*/
   for (size_t sigmaInd = 0; sigmaInd < STATE_SIZE; ++sigmaInd){
     Fl1 = Fl2 = Ff1 = Ff2 = 0;
     Ff1 = sqrt(sigmaPoints_a[sigmaInd + 1][Fx_f]*sigmaPoints_a[sigmaInd + 1][Fx_f] + sigmaPoints_a[sigmaInd + 1][Fz_f] * sigmaPoints_a[sigmaInd + 1][Fz_f]);
     Ff2 = sqrt(sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_f]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_f] + sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_f] * sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_f]);
     Fl1 = sqrt(sigmaPoints_a[sigmaInd + 1][Fx_l]*sigmaPoints_a[sigmaInd + 1][Fx_l] + sigmaPoints_a[sigmaInd + 1][Fz_l] * sigmaPoints_a[sigmaInd + 1][Fz_l]);
     Fl2 = sqrt(sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_l]*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fx_l] + sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_l] * sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Fz_l]);
-    sigmaPoints_a[sigmaInd + 1][Vpitch_p] = sigmaPoints_a[sigmaInd + 1][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl1 + (0.5*l)*sin(theta_p+theta_c) * Ff1);
-    sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl2 + (0.5*l)*sin(theta_p+theta_c) * Ff2);
+    sigmaPoints_a[sigmaInd + 1][Vpitch_p] = sigmaPoints_a[sigmaInd + 1][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl1 + (0.5*l)*sin(theta_p+theta_c) * Ff1) * delta;
+    sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p] + (1/I_p) * (-(0.5*l)*sin(theta_p+theta_d) * Fl2 + (0.5*l)*sin(theta_p+theta_c) * Ff2) * delta;
 
     sigmaPoints_[sigmaInd + 1][Vpitch_p] = sigmaPoints_a[sigmaInd + 1][Vpitch_p];
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE][Vpitch_p] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][Vpitch_p];
   }
-*/
+
     /*
   for (int i = 0; i < 2*STATE_SIZE +1 ; i++){
     printf("%f ", sigmaPoints_[i][Vpitch_p]);
@@ -923,9 +929,9 @@ int main(int argc, char **argv)
   //ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
   ros::Subscriber measurement_sub = nh.subscribe<geometry_msgs::PoseStamped>( topic_measure, 1, measure_cb);
   ros::Subscriber output_sub = nh.subscribe<UKF::output>("/output", 1, output_cb);
-  ros::Publisher output_vc_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_vc", 10);
-  ros::Publisher output_omega_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_omegac", 10);
-  ros::Publisher output_leader_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_leader", 10);
+  //ros::Publisher output_vc_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_vc", 10);
+  //ros::Publisher output_omega_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_omegac", 10);
+  //ros::Publisher output_leader_pub = nh.advertise<geometry_msgs::PoseStamped>("/output_leader", 10);
   initialize();
   int count = 0;
   ros::Rate rate(50);
