@@ -316,8 +316,11 @@ void writeInMeasurement(){
   measurement.measurement_[z_c] = measure_data.pose.position.z;
   //ROS_INFO("x_c = %f", measurement.measurement_[x_c]);
   theta_c = atan2(output_data.force.z, output_data.force.x);
-
-  measurement.measurement_[pitch_c] = theta_c;
+  if(output_data.force.x > 0){
+  measurement.measurement_[pitch_c] = theta_c + 3.1415926;
+  }
+  //ROS_INFO("Fx = %f, Fz = %f", output_data.force.x, output_data.force.z);
+  //ROS_INFO("theta_c = %f",measurement.measurement_[pitch_c]*180/3.1415926);
   /*
   measurement.measurement_[yaw_c] = ;
   measurement.measurement_[roll_c] = ;
@@ -353,7 +356,7 @@ void writeInMeasurement(){
   state_[Ax_f] = output_data.Af.x;
   state_[Ay_f] = output_data.Af.y;
   state_[Az_f] = output_data.Af.z;
-  //ROS_INFO("Ax_f = %f, Ay_f = %f, Az_f = %f", state_[Ax_f], state_[Ay_f], state_[Az_f]);
+  //ROS_INFO("Ax_f = %f, Az_f = %f", state_[Ax_f], state_[Az_f]);
 
   state_[a_g_x] = a_g_body(0);
   state_[a_g_y] = a_g_body(1);
@@ -585,8 +588,8 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
     //ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
-    ROS_INFO("w_p = %f", state_[Vpitch_p]);
-    ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
+    //ROS_INFO("w_p = %f", state_[Vpitch_p]);
+    //ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
     output_vc.pose.position.x = state_[Vx_c];
     output_vc.pose.position.y = state_[Vy_c];
     output_vc.pose.position.z = state_[Vz_c];

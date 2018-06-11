@@ -414,7 +414,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*3*a_g + 0.6*a_g;
+  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*3*a_g + 1.2*a_g;
 
 
   //output.thrust.x = state_[StateMemberThrust];
@@ -799,10 +799,13 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
   transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
   transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr;
+
   //Thrust
   transferFunction_(StateMemberFx,StateMemberThrust) = -1*(cy * sp * cr + sy * sr);
   transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
   transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
+
+
   //drag force
   transferFunction_(StateMemberFx,StateMemberVx) = k_drag_x*cy * cp;
   transferFunction_(StateMemberFx,StateMemberVy) = k_drag_y*(cy * sp * sr - sy * cr);
@@ -956,8 +959,9 @@ void predict(const double referenceTime, const double delta)
   {
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
+  //ROS_INFO("%f", state_[StateMemberFz]);
   state_[StateMemberFz] = state_[StateMemberFz] + m * a_g;
-
+  //ROS_INFO("%f", state_[StateMemberFz]);
   // (4) Now us the sigma points and the predicted state to compute a predicted covariance P_k-
   estimateErrorCovariance_.setZero();
 

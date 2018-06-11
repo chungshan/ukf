@@ -6,7 +6,7 @@
         <param name="imu_bias_x" value="0" />
         <param name="imu_bias_y" value="0" />
         <param name="g" value="9.81" />
-        <param name="thrust" value="0.455" />
+        <param name="thrust" value="0.485" />
     </node>
 
     <node pkg="UKF" name="ukf_payload" type="payload" output="screen" >
