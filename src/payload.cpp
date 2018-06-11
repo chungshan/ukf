@@ -588,8 +588,8 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("Vc: x = %f, y = %f, z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
     //ROS_INFO("Vc : x = %f, y = %f , z = %f", state_[Vx_c], state_[Vy_c], state_[Vz_c]);
-    //ROS_INFO("w_p = %f", state_[Vpitch_p]);
-    //ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
+    ROS_INFO("w_p = %f", state_[Vpitch_p]);
+    ROS_INFO("F_l: x = %f, z = %f", state_[Fx_l], state_[Fz_l]);
     output_vc.pose.position.x = state_[Vx_c];
     output_vc.pose.position.y = state_[Vy_c];
     output_vc.pose.position.z = state_[Vz_c];

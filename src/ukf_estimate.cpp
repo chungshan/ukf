@@ -303,7 +303,7 @@ void quaternionToRPY(){
 
   imu_roll = rpy.x;
   imu_pitch = rpy.y;
-  imu_yaw = rpy.z;
+  imu_yaw = rpy_mocap.z;
   /*
   if(imu_yaw - yaw_bias < 0){
     imu_yaw = imu_yaw - yaw_bias + 2*3.1415926;
