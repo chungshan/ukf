@@ -816,13 +816,15 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
   transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
   transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr;
-
+  double A_z;
+  A_z = m*(-sp)*state_[StateMemberAx] + m*cp*sr*state_[StateMemberAy] + m*cp*cr*state_[StateMemberAz];
+  ROS_INFO("A_z = %f", A_z);
   //Thrust
   transferFunction_(StateMemberFx,StateMemberThrust) = -1*(cy * sp * cr + sy * sr);
   transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
   transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
 
-
+  ROS_INFO("Thurst = %f", state_[StateMemberThrust]*(-1)*cp*cr);
   //drag force
   transferFunction_(StateMemberFx,StateMemberVx) = k_drag_x*cy * cp;
   transferFunction_(StateMemberFx,StateMemberVy) = k_drag_y*(cy * sp * sr - sy * cr);
@@ -833,7 +835,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberVx) = k_drag_x*(-sp) ;
   transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
   transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
-
+  ROS_INFO("drag force = %f", k_drag_x*(-sp)*state_[StateMemberVx] + k_drag_y*cp * sr*state_[StateMemberVy] + k_drag_z*cp * cr*state_[StateMemberVz]);
 
   //X,Y,Z prediction
   transferFunction_(StateMemberX,StateMemberX) = 1;
