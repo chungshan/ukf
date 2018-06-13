@@ -10,7 +10,7 @@
 #include <std_msgs/Float64.h>
 #include <string>
 #include <iostream>
-
+#include <geometry_msgs/Point.h>
 using namespace std;
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 geometry_msgs::PoseStamped mocap_pose;
@@ -18,6 +18,7 @@ sensor_msgs::Imu imu_data;
 nav_msgs::Odometry filterd;
 mavros_msgs::VFR_HUD vfr_data;
 UKF::output output;
+geometry_msgs::Point force;
 
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
@@ -431,7 +432,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*3*a_g + 1.2*a_g;
+  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*3*a_g + 1.25*a_g;
 
 
   //output.thrust.x = state_[StateMemberThrust];
@@ -695,10 +696,14 @@ void correct(){
     //ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
     //output data
+    if(state_[StateMemberFz] > 0){
+      output.force.z = -state_[StateMemberFz];
+      force.z = -state_[StateMemberFz];
+    }
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
-
+    force.z = state_[StateMemberFz];
     float angle = atan2(state_[StateMemberFz],state_[StateMemberFx]) * 180 / 3.1415926;
 
 
@@ -736,7 +741,7 @@ void predict(const double referenceTime, const double delta)
   //ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(STATE_SIZE,STATE_SIZE);
   Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
-  double m = 1.2,m_p = 0.6;
+  double m = 1.25,m_p = 0.6;
   //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
@@ -818,7 +823,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr;
   double A_z;
   A_z = m*(-sp)*state_[StateMemberAx] + m*cp*sr*state_[StateMemberAy] + m*cp*cr*state_[StateMemberAz];
-  ROS_INFO("A_z = %f", A_z);
+  //ROS_INFO("A_z = %f", A_z);
   //Thrust
   transferFunction_(StateMemberFx,StateMemberThrust) = -1*(cy * sp * cr + sy * sr);
   transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
@@ -835,7 +840,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberVx) = k_drag_x*(-sp) ;
   transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
   transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
-  ROS_INFO("drag force = %f", k_drag_x*(-sp)*state_[StateMemberVx] + k_drag_y*cp * sr*state_[StateMemberVy] + k_drag_z*cp * cr*state_[StateMemberVz]);
+  //ROS_INFO("drag force = %f", k_drag_x*(-sp)*state_[StateMemberVx] + k_drag_y*cp * sr*state_[StateMemberVy] + k_drag_z*cp * cr*state_[StateMemberVz]);
 
   //X,Y,Z prediction
   transferFunction_(StateMemberX,StateMemberX) = 1;
@@ -1022,6 +1027,7 @@ int main(int argc, char **argv)
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
   ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
   ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
+  ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("/force", 10);
   initialize();
   int count = 0;
   ros::Rate rate(50);
@@ -1040,6 +1046,7 @@ int main(int argc, char **argv)
     predict(1,0.02);
     correct();
     output_pub.publish(output);
+    force_pub.publish(force);
     }
 
 
