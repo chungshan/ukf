@@ -693,7 +693,7 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("x = %f, y = %f, z = %f ", state_[0], state_[1], state_[2]);
     //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
-    //ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
+    ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
     //output data
     if(state_[StateMemberFz] > 0){
@@ -703,6 +703,7 @@ void correct(){
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
+    //ROS_INFO("force z = %f", state_[StateMemberFz]);
     force.z = state_[StateMemberFz];
     float angle = atan2(state_[StateMemberFz],state_[StateMemberFx]) * 180 / 3.1415926;
 
@@ -745,7 +746,7 @@ void predict(const double referenceTime, const double delta)
   //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
-  float k_drag_z = 0;
+  float k_drag_z = 0.12;
 
 
 
@@ -805,11 +806,12 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberYaw, StateMemberVroll) = transferFunction_(StateMemberZ, StateMemberVx);
   transferFunction_(StateMemberYaw, StateMemberVpitch) = transferFunction_(StateMemberZ, StateMemberVy);
   transferFunction_(StateMemberYaw, StateMemberVyaw) = transferFunction_(StateMemberZ, StateMemberVz);
+  */
   //Velocity prediction
   transferFunction_(StateMemberVx, StateMemberAx) = delta;
   transferFunction_(StateMemberVy, StateMemberAy) = delta;
   transferFunction_(StateMemberVz, StateMemberAz) = delta;
-  */
+
   //Force prediction(follower)
 
   transferFunction_(StateMemberFx,StateMemberAx) = m*cy * cp;
@@ -829,7 +831,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
   transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
 
-  ROS_INFO("Thurst = %f", state_[StateMemberThrust]*(-1)*cp*cr);
+  //ROS_INFO("Thurst = %f", state_[StateMemberThrust]*(-1)*cp*cr);
   //drag force
   transferFunction_(StateMemberFx,StateMemberVx) = k_drag_x*cy * cp;
   transferFunction_(StateMemberFx,StateMemberVy) = k_drag_y*(cy * sp * sr - sy * cr);
@@ -866,6 +868,7 @@ void predict(const double referenceTime, const double delta)
   //transferFunction_(StateMemberZ, StateMemberAz) = 0.5 * transferFunction_(StateMemberZ, StateMemberVz) * delta;
 
   //Velocity prediction
+  /*
   transferFunction_(StateMemberVx,StateMemberVx) = 1 - k_drag_x * delta;
   transferFunction_(StateMemberVy,StateMemberVy) = 1 - k_drag_y * delta;
   transferFunction_(StateMemberVz,StateMemberVz) = 1 - k_drag_z * delta;
@@ -887,6 +890,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberVx,a_g_x) = 1 * delta;
   transferFunction_(StateMemberVy,a_g_y) = 1 * delta;
   transferFunction_(StateMemberVz,a_g_z) = 1 * delta;
+  */
   //force prediction
 /*
   transferFunction_(StateMemberFx,StateMemberFx) = 1;
