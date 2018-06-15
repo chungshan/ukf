@@ -432,7 +432,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*3*a_g + 1.25*a_g;
+  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*1.7*a_g + 1.25*a_g;
 
 
   //output.thrust.x = state_[StateMemberThrust];
