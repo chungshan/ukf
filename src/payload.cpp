@@ -283,7 +283,7 @@ void writeInMeasurement(){
   Rx(0,1) = 0;
   Rx(1,1) = cos(roll);
   Rx(1,2) = -sin(roll);
-  Rx(2,0) = 0;
+  Rx(0,2) = 0;
   Rx(2,1) = sin(roll);
   Rx(2,2) = cos(roll);
 
@@ -293,7 +293,7 @@ void writeInMeasurement(){
   Ry(0,1) = 0;
   Ry(1,1) = 1;
   Ry(1,2) = 0;
-  Ry(2,0) = -sin(pitch);
+  Ry(0,2) = -sin(pitch);
   Ry(2,1) = 0;
   Ry(2,2) = cos(pitch);
 
@@ -303,13 +303,13 @@ void writeInMeasurement(){
   Rz(0,1) = sin(yaw);
   Rz(1,1) = cos(yaw);
   Rz(1,2) = 0;
-  Rz(2,0) = 0;
+  Rz(0,2) = 0;
   Rz(2,1) = 0;
   Rz(2,2) = 1;
 
   a_g_body = Ry*Rx*Rz*a_g_inertial;
   //a_g_body(0) = (sin(yaw)*sin(roll) + cos(yaw)*sin(pitch)*cos(roll)) * 9.8;
-  a_g_body(0) = sin(pitch)*cos(roll)*a_g;
+  //a_g_body(0) = sin(pitch)*cos(roll)*a_g;
 
   measurement.measurement_[x_c] = measure_data.pose.position.x;
   measurement.measurement_[y_c] = measure_data.pose.position.y;
