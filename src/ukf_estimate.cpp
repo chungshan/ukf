@@ -695,26 +695,16 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("x = %f, y = %f, z = %f ", state_[0], state_[1], state_[2]);
     //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
-    ROS_INFO("Fx = %f, Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
+    ROS_INFO("Fx = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFz]);
 
     //output data
-    if(state_[StateMemberFz] > 0){
-      //output.force.z = -state_[StateMemberFz];
-      //force.z = -state_[StateMemberFz];
-    }
+
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
     //ROS_INFO("force z = %f", state_[StateMemberFz]);
-    force.x = -2.4375;
-    force.z = state_[StateMemberFz];
-    float angle = atan2(state_[StateMemberFz],state_[StateMemberFx]) * 180 / 3.1415926;
-
-
-
-
-
-
+    force.x = state_[StateMemberFx];
+    //force.z = state_[StateMemberFz];
 
 
     // (9) Compute the new estimate error covariance P = P - (K * P_yy * K')
