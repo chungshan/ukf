@@ -53,7 +53,7 @@ Eigen::VectorXd state_(STATE_SIZE); //x
 Eigen::MatrixXd weightedCovarSqrt_(STATE_SIZE,STATE_SIZE); // square root of (L+lamda)*P_k-1
 Eigen::MatrixXd estimateErrorCovariance_(STATE_SIZE,STATE_SIZE); // P_k-1
 Eigen::VectorXd process_noise(STATE_SIZE);
-std::vector<Eigen::VectorXd> sigmaPoints_;
+std::vector<Eigen::VectorXd> sigmaPoints_, sigmaPoints_a;
 std::vector<double> stateWeights_;
 std::vector<double> covarWeights_;
 double lambda_;
@@ -67,6 +67,7 @@ float thrust;
 float a_g;
 float imu_ax_bias;
 float imu_ay_bias;
+double thrust_cmd;
 /*test variable*/
 
 
@@ -132,7 +133,7 @@ void initialize(){
   //const int STATE_SIZE = 19;
   float sigmaCount = (STATE_SIZE << 1) +1; //2L + 1 = 37(19 states)
   sigmaPoints_.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
-
+  sigmaPoints_a.resize(sigmaCount, Eigen::VectorXd(STATE_SIZE));
   //Prepare constants
   //lamda,
   lambda_ = alpha * alpha * (STATE_SIZE + kappa) - STATE_SIZE;
@@ -432,8 +433,9 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*1.7*a_g + 1.25*a_g;
-
+  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*2*a_g + 1.25*a_g;
+  thrust_cmd = (vfr_data.throttle - thrust)*2*a_g + 1.25*a_g;
+  //force.x = state_[StateMemberThrust];
 
   //output.thrust.x = state_[StateMemberThrust];
 
@@ -697,13 +699,14 @@ void correct(){
 
     //output data
     if(state_[StateMemberFz] > 0){
-      output.force.z = -state_[StateMemberFz];
-      force.z = -state_[StateMemberFz];
+      //output.force.z = -state_[StateMemberFz];
+      //force.z = -state_[StateMemberFz];
     }
     output.force.x = state_[StateMemberFx];
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
     //ROS_INFO("force z = %f", state_[StateMemberFz]);
+    force.x = -2.4375;
     force.z = state_[StateMemberFz];
     float angle = atan2(state_[StateMemberFz],state_[StateMemberFx]) * 180 / 3.1415926;
 
@@ -742,11 +745,11 @@ void predict(const double referenceTime, const double delta)
   //ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(STATE_SIZE,STATE_SIZE);
   Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
-  double m = 1.25,m_p = 0.6;
+  double m = 1.25,m_p = 0.5;
   //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
-  float k_drag_z = 0.12;
+  float k_drag_z = 0;
 
 
 
@@ -808,6 +811,9 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberYaw, StateMemberVyaw) = transferFunction_(StateMemberZ, StateMemberVz);
   */
   //Velocity prediction
+  transferFunction_(StateMemberVx, StateMemberVx) = 1;
+  transferFunction_(StateMemberVy, StateMemberVy) = 1;
+  transferFunction_(StateMemberVz, StateMemberVz) = 1;
   transferFunction_(StateMemberVx, StateMemberAx) = delta;
   transferFunction_(StateMemberVy, StateMemberAy) = delta;
   transferFunction_(StateMemberVz, StateMemberAz) = delta;
@@ -820,16 +826,18 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFy,StateMemberAx) = m*sy * cp;
   transferFunction_(StateMemberFy,StateMemberAy) = m*(sy * sp * sr + cy * cr);
   transferFunction_(StateMemberFy,StateMemberAz) = m*(sy * sp * cr - cy * sr);
-  transferFunction_(StateMemberFz,StateMemberAx) = m*(-sp);
-  transferFunction_(StateMemberFz,StateMemberAy) = m*cp * sr;
-  transferFunction_(StateMemberFz,StateMemberAz) = m*cp * cr;
-  double A_z;
-  A_z = m*(-sp)*state_[StateMemberAx] + m*cp*sr*state_[StateMemberAy] + m*cp*cr*state_[StateMemberAz];
+  transferFunction_(StateMemberFz,StateMemberAx) = 0*m*(-sp);
+  transferFunction_(StateMemberFz,StateMemberAy) = 0*m*cp * sr;
+  transferFunction_(StateMemberFz,StateMemberAz) = 0*m*cp * cr;
+
   //ROS_INFO("A_z = %f", A_z);
   //Thrust
+  //force.x = A_z;
   transferFunction_(StateMemberFx,StateMemberThrust) = -1*(cy * sp * cr + sy * sr);
   transferFunction_(StateMemberFy,StateMemberThrust) = -1*(sy * sp * cr - cy * sr);
-  transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
+  //transferFunction_(StateMemberFz,StateMemberThrust) = -1*cp * cr;
+  transferFunction_(StateMemberFz,StateMemberThrust) = 0;
+  //force.x = -1*cp*cr*state_[StateMemberThrust];
 
   //ROS_INFO("Thurst = %f", state_[StateMemberThrust]*(-1)*cp*cr);
   //drag force
@@ -843,7 +851,7 @@ void predict(const double referenceTime, const double delta)
   transferFunction_(StateMemberFz,StateMemberVy) = k_drag_y*cp * sr;
   transferFunction_(StateMemberFz,StateMemberVz) = k_drag_z*cp * cr;
   //ROS_INFO("drag force = %f", k_drag_x*(-sp)*state_[StateMemberVx] + k_drag_y*cp * sr*state_[StateMemberVy] + k_drag_z*cp * cr*state_[StateMemberVz]);
-
+  //force.x = k_drag_x*(-sp)*state_[StateMemberVx] + k_drag_y*cp * sr*state_[StateMemberVy] + k_drag_z*cp * cr*state_[StateMemberVz];
   //X,Y,Z prediction
   transferFunction_(StateMemberX,StateMemberX) = 1;
   transferFunction_(StateMemberY,StateMemberY) = 1;
@@ -979,6 +987,26 @@ void predict(const double referenceTime, const double delta)
     sigmaPoints_[sigmaInd + 1 + STATE_SIZE] = transferFunction_ * (state_ - weightedCovarSqrt_.col(sigmaInd));
   }
 
+  sigmaPoints_a[0] = state_;
+  for (size_t sigmaInd = 0; sigmaInd < STATE_SIZE; ++sigmaInd)
+  {
+    sigmaPoints_a[sigmaInd + 1] = state_ + weightedCovarSqrt_.col(sigmaInd);
+    sigmaPoints_a[sigmaInd + 1 + STATE_SIZE] = state_ - weightedCovarSqrt_.col(sigmaInd);
+  }
+
+  sigmaPoints_a[0][StateMemberFz] = k_drag_x*(-sp)*sigmaPoints_a[0][StateMemberVx] + k_drag_y*cp*cr*sigmaPoints_a[0][StateMemberVy] + k_drag_z*cp*cr*sigmaPoints_a[0][StateMemberVz] + m*(-sp)*sigmaPoints_a[0][StateMemberAx] + m*(cp)*(sr)*sigmaPoints_a[0][StateMemberAy] + m*cp*cr*sigmaPoints_a[0][StateMemberAz];
+  sigmaPoints_[0][StateMemberFz] = sigmaPoints_a[0][StateMemberFz];
+
+  for (size_t sigmaInd = 0; sigmaInd < STATE_SIZE; ++sigmaInd)
+  {
+    sigmaPoints_a[sigmaInd + 1][StateMemberFz] = k_drag_x*(-sp)*sigmaPoints_a[sigmaInd + 1][StateMemberVx] + k_drag_y*cp*cr*sigmaPoints_a[sigmaInd + 1][StateMemberVy] + k_drag_z*cp*cr*sigmaPoints_a[sigmaInd + 1][StateMemberVz] + m*(-sp)*sigmaPoints_a[sigmaInd + 1][StateMemberAx] + m*(cp)*(sr)*sigmaPoints_a[sigmaInd + 1][StateMemberAy] + m*cp*cr*sigmaPoints_a[sigmaInd + 1][StateMemberAz];
+    sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][StateMemberFz] = k_drag_x*(-sp)*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][StateMemberVx] + k_drag_y*cp*cr*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][StateMemberVy] + k_drag_z*cp*cr*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][StateMemberVz] + m*(-sp)*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][StateMemberAx] + m*(cp)*(sr)*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][StateMemberAy] + m*cp*cr*sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][StateMemberAz];
+    sigmaPoints_[sigmaInd + 1][StateMemberFz] = sigmaPoints_a[sigmaInd + 1][StateMemberFz];
+    sigmaPoints_[sigmaInd + 1 + STATE_SIZE][StateMemberFz] = sigmaPoints_a[sigmaInd + 1 + STATE_SIZE][StateMemberFz];
+  }
+
+
+
 
   // (3) Sum the weighted sigma points to generate a new state prediction
   // x_k_hat- = w_im * x_k|k-1
@@ -988,7 +1016,9 @@ void predict(const double referenceTime, const double delta)
     state_.noalias() += stateWeights_[sigmaInd] * sigmaPoints_[sigmaInd];
   }
   //ROS_INFO("%f", state_[StateMemberFz]);
-  state_[StateMemberFz] = state_[StateMemberFz] + m * a_g;
+
+  state_[StateMemberFz] = state_[StateMemberFz] + m * a_g - thrust_cmd*cp*cr;
+
   //ROS_INFO("%f", state_[StateMemberFz]);
   // (4) Now us the sigma points and the predicted state to compute a predicted covariance P_k-
   estimateErrorCovariance_.setZero();
