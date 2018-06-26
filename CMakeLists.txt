@@ -138,6 +138,9 @@ include_directories(
 add_executable(ukf_estimate src/ukf_estimate.cpp)
 add_executable(payload src/payload.cpp)
 add_executable(localization src/localization.cpp)
+add_executable(leader src/leader.cpp)
+add_executable(follower src/follower.cpp)
+
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -160,6 +163,12 @@ target_link_libraries(payload
   ${catkin_LIBRARIES}
 )
 target_link_libraries(localization
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(leader
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(follower
   ${catkin_LIBRARIES}
 )
 #############

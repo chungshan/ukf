@@ -115,7 +115,7 @@ bool checkMahalanobisThreshold(const Eigen::VectorXd &innovation,
 }
 
 void initialize(){
-  ROS_INFO("initilaize");
+  ROS_INFO("Initilaize");
   /*test variable*/
   /*
   svo_pose.pose.pose.position.x = 0.1;
@@ -211,7 +211,7 @@ void initialize(){
 
   // Initialize state by using first measurement x_0
   state_.setZero();
-  state_[StateMemberThrust] = 0.6*a_g;
+  //state_[StateMemberThrust] = 0.6*a_g;
 
   uncorrected_ = false;
   flag4 = 0;
@@ -418,6 +418,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias - a_g_body(0));
   measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
   measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
+  force.x = measurement.measurement_[StateMemberAz];
   output.Af.x = measurement.measurement_[StateMemberAx];
   output.Af.y = measurement.measurement_[StateMemberAy];
   output.Af.z = measurement.measurement_[StateMemberAz];
@@ -553,9 +554,9 @@ void correct(){
 
   //The measurecovariance subset R
 
-  measurementCovarianceSubset(0,0) = 0.2;
-  measurementCovarianceSubset(1,1) = 0.2;
-  measurementCovarianceSubset(2,2) = 0.2;
+  measurementCovarianceSubset(0,0) = 0.02;
+  measurementCovarianceSubset(1,1) = 0.02;
+  measurementCovarianceSubset(2,2) = 0.02;
   measurementCovarianceSubset(12,12) = 0.2;
   measurementCovarianceSubset(13,13) = 0.2;
   measurementCovarianceSubset(14,14) = 0.2;
@@ -704,7 +705,8 @@ void correct(){
     output.force.z = state_[StateMemberFz];
     //ROS_INFO("force z = %f", state_[StateMemberFz]);
     force.x = state_[StateMemberFx];
-    //force.z = state_[StateMemberFz];
+    force.z = state_[StateMemberFz];
+    //force.y = state_[StateMemberAz];
 
 
     // (9) Compute the new estimate error covariance P = P - (K * P_yy * K')
@@ -948,7 +950,7 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(14,14) = 0.5;//Az
   process_noise_m(15,15) = 0.5;
   process_noise_m(16,16) = 0.8;
-  process_noise_m(17,17) = 0.4;
+  process_noise_m(17,17) = 1;
   process_noise_m(18,18) = 0.01;
 
 
@@ -1050,8 +1052,8 @@ int main(int argc, char **argv)
   ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
   ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
-  ros::Publisher output_pub = nh.advertise<UKF::output>("/output", 10);
-  ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("/force", 10);
+  ros::Publisher output_pub = nh.advertise<UKF::output>("output", 10);
+  //ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("/force", 10);
   initialize();
   int count = 0;
   ros::Rate rate(50);
@@ -1070,7 +1072,7 @@ int main(int argc, char **argv)
     predict(1,0.02);
     correct();
     output_pub.publish(output);
-    force_pub.publish(force);
+    //force_pub.publish(force);
     }
 
 
