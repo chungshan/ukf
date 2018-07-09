@@ -135,11 +135,15 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/UKF_node.cpp)
+
 add_executable(ukf_estimate src/ukf_estimate.cpp)
-add_executable(payload src/payload.cpp)
-add_executable(localization src/localization.cpp)
-add_executable(leader src/leader.cpp)
-add_executable(follower src/follower.cpp)
+#add_executable(payload src/payload.cpp)
+#add_executable(localization src/localization.cpp)
+add_executable(leaderr src/leader.cpp)
+add_executable(followerr src/follower.cpp)
+#add_executable(printkeyboard src/printkeyboard.cpp)
+add_executable(leaderfollower src/leader_follower.cpp)
+add_executable(plotforce src/plotforce.cpp)
 
 
 ## Rename C++ executable without prefix
@@ -159,16 +163,25 @@ add_executable(follower src/follower.cpp)
  target_link_libraries(ukf_estimate
    ${catkin_LIBRARIES}
  )
-target_link_libraries(payload
+#target_link_libraries(payload
+#  ${catkin_LIBRARIES}
+#)
+#target_link_libraries(localization
+#  ${catkin_LIBRARIES}
+#)
+target_link_libraries(leaderr
   ${catkin_LIBRARIES}
 )
-target_link_libraries(localization
+target_link_libraries(followerr
   ${catkin_LIBRARIES}
 )
-target_link_libraries(leader
+#target_link_libraries(printkeyboard
+#  ${catkin_LIBRARIES}
+#)
+target_link_libraries(leaderfollower
   ${catkin_LIBRARIES}
 )
-target_link_libraries(follower
+target_link_libraries(plotforce
   ${catkin_LIBRARIES}
 )
 #############

@@ -135,22 +135,24 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
-                                ("drone1/mavros/state", 10, state_cb);
+                                ("drone3/mavros/state", 2, state_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone1/mavros/setpoint_position/local", 10);
+                                   ("drone3/mavros/setpoint_position/local", 2);
     ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone1/mavros/mocap/pose", 10);
+                                   ("drone3/mavros/mocap/pose", 2);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
-                                       ("drone1/mavros/cmd/arming");
+                                       ("drone3/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
-                                         ("drone1/mavros/set_mode");
-    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 10, host_pos);
+                                         ("drone3/mavros/set_mode");
+    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody3/pose", 2, host_pos);
 
-    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone1/mavros/setpoint_velocity/cmd_vel", 10);
+    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone3/mavros/setpoint_velocity/cmd_vel", 2);
 
     // The setpoint publishing rate MUST be faster than 2Hz.
+    ros::AsyncSpinner spinner(2);
+    spinner.start();
     ros::Rate rate(100);
-
+    //sss
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected) {
   mocap_pos_pub.publish(host_mocap);
@@ -170,9 +172,9 @@ int main(int argc, char **argv)
     vs.twist.angular.y = 0;
     vs.twist.angular.z = 0;
 
-  vir1.x = 1.2;
+  vir1.x = 0.6;
   vir1.y = -0.5;
-  vir1.z = 0.5;
+  vir1.z = 0.7;
   vir1.roll = 0;
 
     //send a few setpoints before starting
@@ -260,7 +262,7 @@ int main(int argc, char **argv)
                 break;
         case 115:    // stop
     {
-    vir1.x = 1.2;
+    vir1.x = 0.6;
         vir1.y = -0.5;
     vir1.z = 0;
     vir1.roll = 0;
@@ -289,7 +291,7 @@ int main(int argc, char **argv)
         mocap_pos_pub.publish(host_mocap);
         local_vel_pub.publish(vs);
 
-        ros::spinOnce();
+        //ros::spinOnce();
         rate.sleep();
     }
 

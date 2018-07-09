@@ -135,20 +135,22 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
-                                ("drone2/mavros/state", 10, state_cb);
+                                ("drone2/mavros/state", 2, state_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone2/mavros/setpoint_position/local", 10);
+                                   ("drone2/mavros/setpoint_position/local", 2);
     ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone2/mavros/mocap/pose", 10);
+                                   ("drone2/mavros/mocap/pose", 2);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
                                        ("drone2/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
                                          ("drone2/mavros/set_mode");
-    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 10, host_pos);
+    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 2, host_pos);
 
-    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 10);
+    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 2);
 
     // The setpoint publishing rate MUST be faster than 2Hz.
+    ros::AsyncSpinner spinner(2);
+    spinner.start();
     ros::Rate rate(100);
 
     // Wait for FCU connection.
@@ -161,7 +163,7 @@ int main(int argc, char **argv)
 
     geometry_msgs::PoseStamped pose;
     geometry_msgs::TwistStamped vs;
-  vir vir1;
+  vir vir2;
 
     vs.twist.linear.x = 0;
     vs.twist.linear.y = 0;
@@ -170,10 +172,10 @@ int main(int argc, char **argv)
     vs.twist.angular.y = 0;
     vs.twist.angular.z = 0;
 
-  vir1.x = 0;
-  vir1.y = -0.5;
-  vir1.z = 0.5;
-  vir1.roll = 0;
+  vir2.x = -0.6;
+  vir2.y = -0.5;
+  vir2.z = 0.7;
+  vir2.roll = 0;
 
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
@@ -234,39 +236,39 @@ int main(int argc, char **argv)
   //ROS_INFO("C: %d",c);
         if (c != EOF) {
             switch (c) {
-            case 65:    // key up
-                vir1.z += 0.05;
+            case 56:    // key up,Num 8
+                vir2.z += 0.05;
                 break;
-            case 66:    // key down
-                vir1.z += -0.05;
+            case 50:    // key down,Num 2
+                vir2.z += -0.05;
                 break;
             case 67:    // key CW(->)
-                //vir1.roll -= 0.05;
+                //vir2.roll -= 0.05;
                 break;
             case 68:    // key CCW(<-)
-                //vir1.roll += 0.05;
+                //vir2.roll += 0.05;
                 break;
       case 119:    // key foward
-                //vir1.x += 0.05;
+                //vir2.x += 0.05;
                 break;
             case 120:    // key back
-                //vir1.x += -0.05;
+                //vir2.x += -0.05;
                 break;
             case 97:    // key left
-                //vir1.y += 0.05;
+                //vir2.y += 0.05;
                 break;
             case 100:    // key right
-                //vir1.y -= 0.05;
+                //vir2.y -= 0.05;
                 break;
-        case 115:    // stop
+        case 102:    // stop, key F
     {
-    vir1.x = 0;
-        vir1.y = -0.5;
-    vir1.z = 0;
-    vir1.roll = 0;
+    vir2.x = -0.6;
+        vir2.y = -0.5;
+    vir2.z = 0;
+    vir2.roll = 0;
                 break;
     }
-    case 108:    // close arming
+    case 107:    // close arming key K
       {
       offb_set_mode.request.custom_mode = "MANUAL";
       set_mode_client.call(offb_set_mode);
@@ -279,17 +281,17 @@ int main(int argc, char **argv)
                 break;
             }
         }
-    if(vir1.roll>pi)
-    vir1.roll = vir1.roll - 2*pi;
-    else if(vir1.roll<-pi)
-    vir1.roll = vir1.roll + 2*pi;
+    if(vir2.roll>pi)
+    vir2.roll = vir2.roll - 2*pi;
+    else if(vir2.roll<-pi)
+    vir2.roll = vir2.roll + 2*pi;
 
-        ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
-    follow(vir1,host_mocap,&vs,0,-0.5);
+        ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir2.x, vir2.y, vir2.z, vir2.roll/pi*180);
+    follow(vir2,host_mocap,&vs,0,-0.5);
         mocap_pos_pub.publish(host_mocap);
         local_vel_pub.publish(vs);
 
-        ros::spinOnce();
+        //ros::spinOnce();
         rate.sleep();
     }
 

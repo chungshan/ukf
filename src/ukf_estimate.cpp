@@ -67,7 +67,9 @@ float thrust;
 float a_g;
 float imu_ax_bias;
 float imu_ay_bias;
+float imu_az_bias;
 double thrust_cmd;
+float m;
 /*test variable*/
 
 
@@ -417,7 +419,7 @@ void writeInMeasurement(){
 
   measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias - a_g_body(0));
   measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
-  measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - a_g_body(2));
+  measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - imu_az_bias - a_g_body(2));
   force.x = measurement.measurement_[StateMemberAz];
   output.Af.x = measurement.measurement_[StateMemberAx];
   output.Af.y = measurement.measurement_[StateMemberAy];
@@ -434,8 +436,8 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAz] = 0 ;
 */
 
-  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*2*a_g + 1.25*a_g;
-  thrust_cmd = (vfr_data.throttle - thrust)*2*a_g + 1.25*a_g;
+  state_[StateMemberThrust] = (vfr_data.throttle - thrust)*2*a_g + m*a_g;
+  thrust_cmd = (vfr_data.throttle - thrust)*2*a_g + m*a_g;
   //force.x = state_[StateMemberThrust];
 
   //output.thrust.x = state_[StateMemberThrust];
@@ -696,7 +698,7 @@ void correct(){
     state_.noalias() += kalmanGainSubset * innovationSubset;
     //ROS_INFO("x = %f, y = %f, z = %f ", state_[0], state_[1], state_[2]);
     //ROS_INFO("Vx = %f, Vy = %f, Vz = %f ", state_[6], state_[7], state_[8]);
-    ROS_INFO("Fx = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFz]);
+    ROS_INFO("Fx = %f,Fy = %f, Fz = %f", state_[StateMemberFx], state_[StateMemberFy], state_[StateMemberFz]);
 
     //output data
 
@@ -737,7 +739,7 @@ void predict(const double referenceTime, const double delta)
   //ROS_INFO("---Predict start---");
   Eigen::MatrixXd transferFunction_(STATE_SIZE,STATE_SIZE);
   Eigen::MatrixXd process_noise_m(STATE_SIZE,STATE_SIZE);
-  double m = 1.25,m_p = 0.5;
+
   //const int STATE_SIZE = 19;
   float k_drag_x = 0.12;
   float k_drag_y = 0.12;
@@ -1047,6 +1049,8 @@ int main(int argc, char **argv)
   ros::param::get("~thrust", thrust);
   ros::param::get("~imu_bias_x", imu_ax_bias);
   ros::param::get("~imu_bias_y", imu_ay_bias);
+  ros::param::get("~imu_bias_z", imu_az_bias);
+  ros::param::get("~m", m);
 
   //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
   ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
