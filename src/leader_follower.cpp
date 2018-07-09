@@ -191,7 +191,7 @@ void writeInMeasurement(){
   drone2_ax = -(imu2.linear_acceleration.x - imu_ax_bias - a_g_body(0));
   drone2_ay = -(imu2.linear_acceleration.y - imu_ay_bias + a_g_body(1));
   drone2_az = -(imu2.linear_acceleration.z - imu_az_bias - a_g_body(2));
-
+  ROS_INFO("ax = %f, ay = %f, az = %f", drone2_ax, drone2_ay, drone2_az);
 }
 
 void follow(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped* vs, float dis_x, float dis_y)
@@ -437,6 +437,8 @@ int main(int argc, char **argv)
   //ros::Time last_request(0);
     //spinner.stop();
     while (ros::ok()) {
+      quaternionToRPY();
+      writeInMeasurement();
       //spinner.start();
   mocap_pos_pub.publish(host_mocap);
   mocap_pos_pub2.publish(host_mocap2);
