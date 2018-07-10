@@ -34,7 +34,7 @@ float KPy = 1.5;
 float KPz = 1.5;
 float KProll = 1;
 bool landing;
-bool tracking_force;
+bool impedance_control;
 using namespace std;
 typedef struct vir
 {
@@ -138,17 +138,20 @@ void writeInMeasurement(){
 
   float roll, pitch , yaw;
   const float a_g = 9.80665;
-  const float imu_ax_bias = -0.028984;
-  const float imu_ay_bias = -0.043191;
-  const float imu_az_bias = 0.004896;
+  const float imu_ax_bias = -0.034852;
+  const float imu_ay_bias = 0.065448;
+  const float imu_az_bias = -0.069045;
   Eigen::Matrix3f Rx, Ry, Rz;
   Eigen::Vector3f a_g_inertial;
   Eigen::Vector3f a_g_body;
+  Eigen::Vector3f drone2_body;
+  Eigen::Vector3f drone2_inertial;
   Rx.setZero();
   Ry.setZero();
   Rz.setZero();
   a_g_inertial.setZero();
-
+  drone2_body.setZero();
+  drone2_inertial.setZero();
   a_g_inertial(0) = 0;
   a_g_inertial(1) = 0;
   a_g_inertial(2) = a_g;
@@ -188,10 +191,14 @@ void writeInMeasurement(){
   a_g_body = Ry*Rx*Rz*a_g_inertial;
 
 
-  drone2_ax = -(imu2.linear_acceleration.x - imu_ax_bias - a_g_body(0));
-  drone2_ay = -(imu2.linear_acceleration.y - imu_ay_bias + a_g_body(1));
-  drone2_az = -(imu2.linear_acceleration.z - imu_az_bias - a_g_body(2));
-  ROS_INFO("ax = %f, ay = %f, az = %f", drone2_ax, drone2_ay, drone2_az);
+  drone2_body(0) = -(imu2.linear_acceleration.x - imu_ax_bias - a_g_body(0));
+  drone2_body(1) = -(imu2.linear_acceleration.y - imu_ay_bias + a_g_body(1));
+  drone2_body(2) = -(imu2.linear_acceleration.z - imu_az_bias - a_g_body(2));
+  //ROS_INFO("ax = %f, ay = %f, az = %f", drone2_ax, drone2_ay, drone2_az);
+  drone2_inertial = Rz.inverse()*Rx.inverse()*Ry.inverse()*drone2_body;
+  drone2_ax = drone2_inertial(0);
+  drone2_ay = drone2_inertial(1);
+  drone2_az = drone2_inertial(2);
 }
 
 void follow(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped* vs, float dis_x, float dis_y)
@@ -234,8 +241,10 @@ float ux, uy, uz, uroll;
 //float dis_x = 0, dis_y = -0.5;
 float local_x, local_y;
 float err_fx, err_fy, err_fz;
-
-
+float err_ax, err_ay, err_az;
+const float cx = 1;
+const float cy = 1;
+const float cz = 1;
 
 
 local_x = cos(vir.roll)*dis_x+sin(vir.roll)*dis_y;
@@ -258,14 +267,21 @@ if(follower_force.force.z == 0){
 err_fx = 0 - follower_force.force.x;
 err_fy = 0 - follower_force.force.y;
 err_fz = -2.4516625 - follower_force.force.z;
-/*
-if(!tracking_force){
+
+err_ax = 0 - drone2_ax;
+err_ay = 0 - drone2_ay;
+err_az = 0 - drone2_az;
+
+if(!impedance_control){
   err_fx = 0;
   err_fy = 0;
   err_fz = 0;
+  err_ax = 0;
+  err_ay = 0;
+  err_az = 0;
 }
-
-if(tracking_force){
+/*
+if(impedance_control){
   errx = 0;
   erry = 0;
 }
@@ -274,18 +290,22 @@ if(landing){
   err_fx = 0;
   err_fy = 0;
   err_fz = 0;
+  err_ax = 0;
+  err_ay = 0;
+  err_az = 0;
 }
-ROS_INFO("errx = %f, erry = %f", errx, erry);
-ROS_INFO("fx = %f, fy = %f, fz = %f", err_fx, err_fy, err_fz);
-pos_error.x = errx;
-pos_error.y = erry;
-pos_error.z = errz;
+//ROS_INFO("err:x = %f, y = %f", errx, erry);
+//ROS_INFO("err:fx = %f, fy = %f, fz = %f", err_fx, err_fy, err_fz);
+//ROS_INFO("err:ax = %f, ay = %f, az = %f", err_ax, err_ay, err_az);
+pos_error.x = err_ax;
+pos_error.y = err_ay;
+pos_error.z = err_az;
 force_error.x = err_fx;
 force_error.y = err_fy;
 force_error.z = err_fz;
-ux = KPx*errx + 0.1 * err_fx - 0.1 * drone2_ax;
-uy = KPy*erry + 0.1 * err_fy - 0.1 * drone2_ay;
-uz = KPz*errz + 0.05 * err_fz - 0.1 * drone2_az;
+ux = (KPx*errx + 0.3 * err_fx + 0.07 * err_ax)/cx;
+uy = (KPy*erry + 0.3 * err_fy + 0.07 * err_ay)/cy;
+uz = (KPz*errz + 0 * err_fz + 0 * err_az)/cz;
 //+ 0.05 * err_fz;
 uroll = KProll*err_roll;
 
@@ -340,7 +360,7 @@ int main(int argc, char **argv)
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
                                 ("drone3/mavros/state", 1, state_cb);
-    ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("drone3/mavros/imu/data", 1, imu3_cb);
+    //ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("drone3/mavros/imu/data", 2, imu3_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
                                    ("drone3/mavros/setpoint_position/local", 1);
     ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
@@ -356,7 +376,7 @@ int main(int argc, char **argv)
 
     ros::Subscriber state_sub2 = nh.subscribe<mavros_msgs::State>
                                 ("drone2/mavros/state", 1, state_cb2);
-    ros::Subscriber imu_sub2 = nh.subscribe<sensor_msgs::Imu>("drone2/mavros/imu/data", 1, imu2_cb);
+    ros::Subscriber imu_sub2 = nh.subscribe<sensor_msgs::Imu>("drone2/mavros/imu/data", 2, imu2_cb);
     ros::Publisher local_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
                                    ("drone2/mavros/setpoint_position/local", 1);
     ros::Publisher mocap_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
@@ -369,15 +389,15 @@ int main(int argc, char **argv)
 
     ros::Publisher local_vel_pub2 = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 1);
 
-    ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 1, follower_force_cb);
+    ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 2, follower_force_cb);
     ros::Publisher force_error_pub = nh.advertise<geometry_msgs::Point>("/force_error", 1);
     ros::Publisher pos_error_pub = nh.advertise<geometry_msgs::Point>("/pos_error", 1);
     // The setpoint publishing rate MUST be faster than 2Hz.
     //ros::AsyncSpinner spinner(10);
     //spinner.start();
-    ros::Rate rate(100);
+    ros::Rate rate(50);
     landing = false;
-    tracking_force = false;
+    impedance_control = false;
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected && current_state2.connected) {
   mocap_pos_pub.publish(host_mocap);
@@ -528,7 +548,7 @@ int main(int argc, char **argv)
                 vir1.y -= 0.05;
                 break;
             case 102: // tracking force (keyboard F)
-                tracking_force = true;
+                impedance_control = true;
                 break;
         case 115:    // stop
     {
@@ -543,7 +563,7 @@ int main(int argc, char **argv)
     vir2.z = 0;
     vir2.roll = 0;
     landing = true;
-    tracking_force = false;
+    impedance_control = false;
                 break;
     }
     case 108:    // close arming
@@ -573,7 +593,7 @@ int main(int argc, char **argv)
     vir2.roll = vir2.roll - 2*pi;
     else if(vir2.roll<-pi)
     vir2.roll = vir2.roll + 2*pi;
-        ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
+        //ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
     follow(vir1,host_mocap,&vs,-0.6,-0.5);
     follow_force(vir1,host_mocap2,&vs2,0.6,-0.5);
 

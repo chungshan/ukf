@@ -439,7 +439,8 @@ void writeInMeasurement(){
   state_[StateMemberThrust] = (vfr_data.throttle - thrust)*2*a_g + m*a_g;
   thrust_cmd = (vfr_data.throttle - thrust)*2*a_g + m*a_g;
   //force.x = state_[StateMemberThrust];
-
+  force.x = vfr_data.throttle;
+  force.y = thrust_cmd;
   //output.thrust.x = state_[StateMemberThrust];
 
   //output.thrust.z = -1;
@@ -1057,7 +1058,7 @@ int main(int argc, char **argv)
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
   ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
   ros::Publisher output_pub = nh.advertise<UKF::output>("output", 10);
-  //ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("/force", 10);
+  ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("thrust", 10);
   initialize();
   int count = 0;
   ros::Rate rate(50);
@@ -1076,7 +1077,7 @@ int main(int argc, char **argv)
     predict(1,0.02);
     correct();
     output_pub.publish(output);
-    //force_pub.publish(force);
+    force_pub.publish(force);
     }
 
 
