@@ -172,7 +172,7 @@ int main(int argc, char **argv)
     vs.twist.angular.y = 0;
     vs.twist.angular.z = 0;
 
-  vir2.x = -0.6;
+  vir2.x = -0.8;
   vir2.y = -0.5;
   vir2.z = 0.7;
   vir2.roll = 0;
@@ -249,16 +249,16 @@ int main(int argc, char **argv)
                 //vir2.roll += 0.05;
                 break;
       case 119:    // key foward
-                //vir2.x += 0.05;
+                vir2.x += 0.05;
                 break;
             case 120:    // key back
-                //vir2.x += -0.05;
+                vir2.x += -0.05;
                 break;
             case 97:    // key left
-                //vir2.y += 0.05;
+                vir2.y += 0.05;
                 break;
             case 100:    // key right
-                //vir2.y -= 0.05;
+                vir2.y -= 0.05;
                 break;
         case 102:    // stop, key F
     {

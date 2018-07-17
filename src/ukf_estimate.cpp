@@ -420,7 +420,7 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias - a_g_body(0));
   measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
   measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - imu_az_bias - a_g_body(2));
-  force.x = measurement.measurement_[StateMemberAz];
+  //force.x = measurement.measurement_[StateMemberAz];
   output.Af.x = measurement.measurement_[StateMemberAx];
   output.Af.y = measurement.measurement_[StateMemberAy];
   output.Af.z = measurement.measurement_[StateMemberAz];
@@ -437,10 +437,10 @@ void writeInMeasurement(){
 */
 
   state_[StateMemberThrust] = (vfr_data.throttle - thrust)*2*a_g + m*a_g;
-  thrust_cmd = (vfr_data.throttle - thrust)*2*a_g + m*a_g;
+  thrust_cmd = (vfr_data.throttle - thrust)*2*a_g + m*a_g + m*measurement.measurement_[StateMemberAz];
   //force.x = state_[StateMemberThrust];
-  force.x = vfr_data.throttle;
-  force.y = thrust_cmd;
+  //force.x = vfr_data.throttle;
+  //force.y = thrust_cmd;
   //output.thrust.x = state_[StateMemberThrust];
 
   //output.thrust.z = -1;
@@ -707,8 +707,9 @@ void correct(){
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
     //ROS_INFO("force z = %f", state_[StateMemberFz]);
-    force.x = state_[StateMemberFx];
-    force.z = state_[StateMemberFz];
+    force.x = -state_[StateMemberFx];
+    force.y = -state_[StateMemberFy];
+    force.z = -state_[StateMemberFz];
     //force.y = state_[StateMemberAz];
 
 
@@ -949,10 +950,10 @@ void predict(const double referenceTime, const double delta)
   process_noise_m(10,10) = 0.01;
   process_noise_m(11,11) = 0.02;
   process_noise_m(12,12) = 0.5;//Ax
-  process_noise_m(13,13) = 0.8;//Ay
+  process_noise_m(13,13) = 0.5;//Ay
   process_noise_m(14,14) = 0.5;//Az
   process_noise_m(15,15) = 0.5;
-  process_noise_m(16,16) = 0.8;
+  process_noise_m(16,16) = 1;
   process_noise_m(17,17) = 1;
   process_noise_m(18,18) = 0.01;
 
@@ -1054,17 +1055,18 @@ int main(int argc, char **argv)
   ros::param::get("~m", m);
 
   //ros::Subscriber svo_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/svo/pose_imu", 10, svo_cb);
-  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, mocap_cb);
-  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
-  ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 2, vfr_cb);
-  ros::Publisher output_pub = nh.advertise<UKF::output>("output", 10);
-  ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("thrust", 10);
+  ros::Subscriber mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 1, mocap_cb);
+  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 1, imu_cb);
+  ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 1, vfr_cb);
+  ros::Publisher output_pub = nh.advertise<UKF::output>("output", 1);
+  ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("force", 1);
   initialize();
   int count = 0;
   ros::Rate rate(50);
   while(ros::ok()){
     output.header.stamp = ros::Time::now();
 
+    //ROS_INFO("%F",force.x);
     //imu_data.header.stamp = ros::Time::now();
     //svo_pose.header.stamp = ros::Time::now();
 

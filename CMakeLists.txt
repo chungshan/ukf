@@ -125,7 +125,10 @@ include_directories(
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/UKF.cpp
 # )
-
+#set(HEADERS_   src/lpf.h)
+#set(SOURCES_   src/lpf.cpp)
+set(HEADERS_   src/lpf2.h)
+set(SOURCES_   src/lpf2.cpp)
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -136,14 +139,14 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/UKF_node.cpp)
 
-add_executable(ukf_estimate src/ukf_estimate.cpp)
+add_executable(ukf_estimate src/ukf_estimate.cpp ${HEADERS_} ${SOURCES_})
 #add_executable(payload src/payload.cpp)
 #add_executable(localization src/localization.cpp)
-add_executable(leaderr src/leader.cpp)
-add_executable(followerr src/follower.cpp)
+add_executable(leaderr src/leader.cpp ${HEADERS_} ${SOURCES_})
+add_executable(followerr src/follower.cpp ${HEADERS_} ${SOURCES_})
 #add_executable(printkeyboard src/printkeyboard.cpp)
-add_executable(leaderfollower src/leader_follower.cpp)
-add_executable(plotforce src/plotforce.cpp)
+add_executable(leaderfollower src/leader_follower.cpp ${HEADERS_} ${SOURCES_})
+add_executable(plotforce src/plotforce.cpp ${HEADERS_} ${SOURCES_})
 
 
 ## Rename C++ executable without prefix

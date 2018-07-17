@@ -24,6 +24,13 @@
 #include <geometry_msgs/Point.h>
 #include <sensor_msgs/Imu.h>
 #include <eigen3/Eigen/Dense>
+#include "lpf2.h"
+
+
+double err_sumx , err_sumy , err_sumz;
+double err_diffx , err_diffy , err_diffz;
+double last_errx,last_erry,last_errz;
+
 geometry_msgs::Point force_error, pos_error;
 const float pi = 3.1415926;
 float imu_roll, imu_pitch, imu_yaw;
@@ -31,10 +38,15 @@ float drone2_ax, drone2_ay, drone2_az;
 int flag, flag2;
 float KPx = 1.5;
 float KPy = 1.5;
-float KPz = 1.5;
+float KPz = 1.4;
 float KProll = 1;
+float KDx = 0.01;
+float KDy = 0.01;
+float KDz = 0.01;
 bool landing;
 bool impedance_control;
+lpf2  lpfx(6,0.025);
+lpf2  lpfy(6,0.025);
 using namespace std;
 typedef struct vir
 {
@@ -138,9 +150,9 @@ void writeInMeasurement(){
 
   float roll, pitch , yaw;
   const float a_g = 9.80665;
-  const float imu_ax_bias = -0.034852;
-  const float imu_ay_bias = 0.065448;
-  const float imu_az_bias = -0.069045;
+  const float imu_ax_bias = 0.006944;
+  const float imu_ay_bias = 0.066419;
+  const float imu_az_bias = -0.164420;
   Eigen::Matrix3f Rx, Ry, Rz;
   Eigen::Vector3f a_g_inertial;
   Eigen::Vector3f a_g_body;
@@ -195,7 +207,7 @@ void writeInMeasurement(){
   drone2_body(1) = -(imu2.linear_acceleration.y - imu_ay_bias + a_g_body(1));
   drone2_body(2) = -(imu2.linear_acceleration.z - imu_az_bias - a_g_body(2));
   //ROS_INFO("ax = %f, ay = %f, az = %f", drone2_ax, drone2_ay, drone2_az);
-  drone2_inertial = Rz.inverse()*Rx.inverse()*Ry.inverse()*drone2_body;
+  drone2_inertial = (Ry*Rx*Rz).inverse()*drone2_body;
   drone2_ax = drone2_inertial(0);
   drone2_ay = drone2_inertial(1);
   drone2_az = drone2_inertial(2);
@@ -234,6 +246,7 @@ vs->twist.angular.z = uroll;
 
 }
 
+
 void follow_force(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped* vs, float dis_x, float dis_y)
 {
 float errx, erry, errz, err_roll;
@@ -245,8 +258,11 @@ float err_ax, err_ay, err_az;
 const float cx = 1;
 const float cy = 1;
 const float cz = 1;
-
-
+double lpf2_fx, lpf2_fy, lpf2_fz;
+const double dt = 0.02;
+err_diffx = 0;
+err_diffy = 0;
+err_diffz = 0;
 local_x = cos(vir.roll)*dis_x+sin(vir.roll)*dis_y;
 local_y = -sin(vir.roll)*dis_x+cos(vir.roll)*dis_y;
 
@@ -259,19 +275,39 @@ err_roll = err_roll - 2*pi;
 else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
 
+err_diffx = errx - last_errx;
+err_diffy = erry - last_erry;
+err_diffz = errz - last_errz;
+
+last_errx = errx;
+last_erry = erry;
+last_errz = errz;
+
+err_sumx = err_sumx + errx;
+err_sumy = err_sumy + erry;
+err_sumz = err_sumz + errz;
+
 //ROS_INFO("err_roll: %.3f",err_roll);
 if(follower_force.force.z == 0){
-  follower_force.force.z = -2.4516625;
+  follower_force.force.z = -1.372931;
 }
 
-err_fx = 0 - follower_force.force.x;
-err_fy = 0 - follower_force.force.y;
-err_fz = -2.4516625 - follower_force.force.z;
-
+lpf2_fx = lpfx.filter(follower_force.force.x);
+lpf2_fy = lpfy.filter(follower_force.force.y);
+err_fx = 0 - lpf2_fx;
+err_fy = 0 - lpf2_fy;
+err_fz = -1.372931 - follower_force.force.z;
+/*
 err_ax = 0 - drone2_ax;
 err_ay = 0 - drone2_ay;
 err_az = 0 - drone2_az;
-
+*/
+pos_error.x = errx;
+pos_error.y = erry;
+pos_error.z = errz;
+force_error.x = err_fx;
+force_error.y = err_fy;
+force_error.z = err_fz;
 if(!impedance_control){
   err_fx = 0;
   err_fy = 0;
@@ -295,17 +331,15 @@ if(landing){
   err_az = 0;
 }
 //ROS_INFO("err:x = %f, y = %f", errx, erry);
-//ROS_INFO("err:fx = %f, fy = %f, fz = %f", err_fx, err_fy, err_fz);
-//ROS_INFO("err:ax = %f, ay = %f, az = %f", err_ax, err_ay, err_az);
-pos_error.x = err_ax;
-pos_error.y = err_ay;
-pos_error.z = err_az;
-force_error.x = err_fx;
-force_error.y = err_fy;
-force_error.z = err_fz;
-ux = (KPx*errx + 0.3 * err_fx + 0.07 * err_ax)/cx;
-uy = (KPy*erry + 0.3 * err_fy + 0.07 * err_ay)/cy;
-uz = (KPz*errz + 0 * err_fz + 0 * err_az)/cz;
+ROS_INFO("err:fx = %f, fy = %f, fz = %f", err_fx, err_fy, err_fz);
+ROS_INFO("err:ax = %f, ay = %f, az = %f", err_ax, err_ay, err_az);
+/*
+  + 0.01 * err_fx
+  + 0.005 * err_fy
+ */
+ux = 1.5*errx + KDx*err_diffx/dt;
+uy = 1.5*erry + KDy*err_diffy/dt;
+uz = 1.5*errz + KDz*err_diffz/dt;
 //+ 0.05 * err_fz;
 uroll = KProll*err_roll;
 
@@ -371,12 +405,12 @@ int main(int argc, char **argv)
                                          ("drone3/mavros/set_mode");
     ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody3/pose", 1, host_pos);
 
-    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone3/mavros/setpoint_velocity/cmd_vel", 1);
+    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone3/mavros/setpoint_velocity/cmd_vel", 5);
 
 
     ros::Subscriber state_sub2 = nh.subscribe<mavros_msgs::State>
                                 ("drone2/mavros/state", 1, state_cb2);
-    ros::Subscriber imu_sub2 = nh.subscribe<sensor_msgs::Imu>("drone2/mavros/imu/data", 2, imu2_cb);
+    ros::Subscriber imu_sub2 = nh.subscribe<sensor_msgs::Imu>("drone2/mavros/imu/data", 1, imu2_cb);
     ros::Publisher local_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
                                    ("drone2/mavros/setpoint_position/local", 1);
     ros::Publisher mocap_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
@@ -387,17 +421,19 @@ int main(int argc, char **argv)
                                          ("drone2/mavros/set_mode");
     ros::Subscriber host_sub2 = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 1, host_pos2);
 
-    ros::Publisher local_vel_pub2 = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 1);
+    ros::Publisher local_vel_pub2 = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 5);
 
-    ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 2, follower_force_cb);
+    ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 1, follower_force_cb);
     ros::Publisher force_error_pub = nh.advertise<geometry_msgs::Point>("/force_error", 1);
     ros::Publisher pos_error_pub = nh.advertise<geometry_msgs::Point>("/pos_error", 1);
     // The setpoint publishing rate MUST be faster than 2Hz.
     //ros::AsyncSpinner spinner(10);
     //spinner.start();
-    ros::Rate rate(50);
+    ros::Rate rate(100);
     landing = false;
     impedance_control = false;
+    lpf2  lpf2x(6,0.02);
+    lpf2  lpf2y(6,0.02);
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected && current_state2.connected) {
   mocap_pos_pub.publish(host_mocap);
@@ -430,9 +466,9 @@ int main(int argc, char **argv)
     vir1.z = 0.75;
     vir1.roll = 0;
 
-    vir2.x = -0.9;
+    vir2.x = 0;
     vir2.y = -0.5;
-    vir2.z = 0.7;
+    vir2.z = 0.75;
     vir2.roll = 0;
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
@@ -558,7 +594,7 @@ int main(int argc, char **argv)
     vir1.roll = 0;
 
 
-    vir2.x = -0.9;
+    vir2.x = 0;
         vir2.y = -0.5;
     vir2.z = 0;
     vir2.roll = 0;
@@ -593,9 +629,9 @@ int main(int argc, char **argv)
     vir2.roll = vir2.roll - 2*pi;
     else if(vir2.roll<-pi)
     vir2.roll = vir2.roll + 2*pi;
-        //ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
-    follow(vir1,host_mocap,&vs,-0.6,-0.5);
-    follow_force(vir1,host_mocap2,&vs2,0.6,-0.5);
+        ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
+    follow_force(vir1,host_mocap,&vs,-0.8,-0.5);
+    follow_force(vir2,host_mocap2,&vs2,0.8,-0.5);
 
         mocap_pos_pub.publish(host_mocap);
         mocap_pos_pub2.publish(host_mocap2);
