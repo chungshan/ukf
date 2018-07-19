@@ -6,9 +6,9 @@
      <param name="topic_thrust" value="/drone2/mavros/vfr_hud" />
      <param name="imu_bias_x" value="-0.096646" />
      <param name="imu_bias_y" value="0.082456" />
-     <param name="imu_bias_z" value="-0.114286" />
+     <param name="imu_bias_z" value="-0.014286" />
      <param name="g" value="9.80665" />
-     <param name="thrust" value="0.450" />
+     <param name="thrust" value="0.460" />
      <param name="m" value="1.25" />
    </node>
 </group>

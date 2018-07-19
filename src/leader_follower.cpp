@@ -463,12 +463,12 @@ int main(int argc, char **argv)
     vs2.twist.angular.z = 0;
     vir1.x = 0;
     vir1.y = -0.5;
-    vir1.z = 0.75;
+    vir1.z = 0.5;
     vir1.roll = 0;
 
     vir2.x = 0;
     vir2.y = -0.5;
-    vir2.z = 0.75;
+    vir2.z = 0.5;
     vir2.roll = 0;
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
@@ -559,11 +559,11 @@ int main(int argc, char **argv)
             switch (c) {
             case 65:    // key up
                 vir1.z += 0.05;
-                vir2.z += 0.05;
+                //vir2.z += 0.05;
                 break;
             case 66:    // key down
                 vir1.z += -0.05;
-                vir2.z += -0.05;
+                //vir2.z += -0.05;
                 break;
             case 67:    // key CW(->)
                 vir1.roll -= 0.05;

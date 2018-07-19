@@ -417,9 +417,9 @@ void writeInMeasurement(){
   measurement.measurement_[StateMemberZ] = 0 ;
 */
 
-  measurement.measurement_[StateMemberAx] = -(imu_data.linear_acceleration.x - imu_ax_bias - a_g_body(0));
-  measurement.measurement_[StateMemberAy] = -(imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
-  measurement.measurement_[StateMemberAz] = -(imu_data.linear_acceleration.z - imu_az_bias - a_g_body(2));
+  measurement.measurement_[StateMemberAx] = (imu_data.linear_acceleration.x - imu_ax_bias - a_g_body(0));
+  measurement.measurement_[StateMemberAy] = (imu_data.linear_acceleration.y - imu_ay_bias + a_g_body(1));
+  measurement.measurement_[StateMemberAz] = (imu_data.linear_acceleration.z - imu_az_bias - a_g_body(2));
   //force.x = measurement.measurement_[StateMemberAz];
   output.Af.x = measurement.measurement_[StateMemberAx];
   output.Af.y = measurement.measurement_[StateMemberAy];
