@@ -11,6 +11,7 @@
 #include <string>
 #include <iostream>
 #include <geometry_msgs/Point.h>
+#include "lpf2.h"
 using namespace std;
 geometry_msgs::PoseWithCovarianceStamped svo_pose;
 geometry_msgs::PoseStamped mocap_pose;
@@ -19,6 +20,7 @@ nav_msgs::Odometry filterd;
 mavros_msgs::VFR_HUD vfr_data;
 UKF::output output;
 geometry_msgs::Point force;
+lpf2  lpf2(6,0.02);
 
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
@@ -707,7 +709,9 @@ void correct(){
     output.force.y = state_[StateMemberFy];
     output.force.z = state_[StateMemberFz];
     //ROS_INFO("force z = %f", state_[StateMemberFz]);
-    force.x = -state_[StateMemberFx];
+    double filter_;
+    filter_ = lpf2.filter(state_[StateMemberFx]);
+    force.x = filter_;
     force.y = -state_[StateMemberFy];
     force.z = -state_[StateMemberFz];
     //force.y = state_[StateMemberAz];
