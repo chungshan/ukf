@@ -19,13 +19,16 @@
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
+#include <geometry_msgs/Point.h>
 #define pi 3.1415926
+
 int flag=0;
 float KPx = 1.5;
 float KPy = 1.5;
 float KPz = 1.5;
 float KProll = 1;
-
+bool force_control;
+int flag1 = 0;
 using namespace std;
 typedef struct vir
 {
@@ -38,6 +41,10 @@ typedef struct vir
 mavros_msgs::State current_state;
 void state_cb(const mavros_msgs::State::ConstPtr& msg) {
     current_state = *msg;
+}
+geometry_msgs::Point leader_force;
+void leader_force_cb(const geometry_msgs::Point::ConstPtr& msg) {
+    leader_force = *msg;
 }
 geometry_msgs::PoseStamped host_mocap;
 void host_pos(const geometry_msgs::PoseStamped::ConstPtr& msg)
@@ -66,7 +73,7 @@ float errx, erry, errz, err_roll;
 float ux, uy, uz, uroll;
 //float dis_x = 0, dis_y = -0.5;
 float local_x, local_y;
-
+double FL_x, FL_y, FL_z;
 local_x = cos(vir.roll)*dis_x+sin(vir.roll)*dis_y;
 local_y = -sin(vir.roll)*dis_x+cos(vir.roll)*dis_y;
 
@@ -78,9 +85,36 @@ if(err_roll>pi)
 err_roll = err_roll - 2*pi;
 else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
-
-ROS_INFO("err_roll: %.3f",err_roll);
-
+FL_x = leader_force.x;
+//ROS_INFO("err_roll: %.3f",err_roll);
+ROS_INFO("FL_x = %f", FL_x);
+if(force_control){
+  ux = KPy*errx;
+  uy = KPy*erry;
+  uz = KPz*errz;
+  if(FL_x > 3.5){
+    ux = 0.08 * FL_x;
+      if(ux > 0.5){
+        ux = 0.5;
+                  }
+    flag1 = 1;
+                }
+  if(FL_x < 3.5 && flag1 == 1){
+    vir.x = host_mocap.pose.position.x;
+    flag1 = 0;
+  }
+  if(FL_x < -3.5){
+    ux = 0.08 * FL_x;
+      if(ux < -0.5){
+        ux = -0.5;
+                  }
+    flag1 = 1;
+  }
+  if(FL_x > -3.5 && flag1 == 1){
+    vir.x = host_mocap.pose.position.x;
+    flag1 = 0;
+  }
+}
 ux = KPx*errx;
 uy = KPy*erry;
 uz = KPz*errz;
@@ -147,12 +181,12 @@ int main(int argc, char **argv)
     ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 2, host_pos);
 
     ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 2);
-
+    ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 2, leader_force_cb);
     // The setpoint publishing rate MUST be faster than 2Hz.
     ros::AsyncSpinner spinner(2);
     spinner.start();
     ros::Rate rate(100);
-
+    force_control = false;
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected) {
   mocap_pos_pub.publish(host_mocap);
@@ -248,7 +282,7 @@ int main(int argc, char **argv)
             case 68:    // key CCW(<-)
                 //vir2.roll += 0.05;
                 break;
-      case 119:    // key foward
+            case 119:    // key foward
                 vir2.x += 0.05;
                 break;
             case 120:    // key back
@@ -260,39 +294,42 @@ int main(int argc, char **argv)
             case 100:    // key right
                 vir2.y -= 0.05;
                 break;
-        case 102:    // stop, key F
-    {
-    vir2.x = -0.6;
-        vir2.y = -0.5;
-    vir2.z = 0;
-    vir2.roll = 0;
+            case 102:    // stop, key F
+              {
+                //vir2.x = -0.6;
+                vir2.y = -0.5;
+                vir2.z = 0;
+                vir2.roll = 0;
                 break;
-    }
-    case 107:    // close arming key K
-      {
-      offb_set_mode.request.custom_mode = "MANUAL";
-      set_mode_client.call(offb_set_mode);
-      arm_cmd.request.value = false;
-      arming_client.call(arm_cmd);
-            break;
-      }
+               }
+            case 107:    // close arming key K
+               {
+                offb_set_mode.request.custom_mode = "MANUAL";
+                set_mode_client.call(offb_set_mode);
+                arm_cmd.request.value = false;
+                arming_client.call(arm_cmd);
+                 break;
+                }
+            case 49: // change to force control, key "1"
+                force_control = true;
+                break;
             case 63:
                 return 0;
                 break;
             }
         }
-    if(vir2.roll>pi)
-    vir2.roll = vir2.roll - 2*pi;
-    else if(vir2.roll<-pi)
-    vir2.roll = vir2.roll + 2*pi;
+          if(vir2.roll>pi)
+          vir2.roll = vir2.roll - 2*pi;
+          else if(vir2.roll<-pi)
+          vir2.roll = vir2.roll + 2*pi;
 
-        ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir2.x, vir2.y, vir2.z, vir2.roll/pi*180);
-    follow(vir2,host_mocap,&vs,0,-0.5);
-        mocap_pos_pub.publish(host_mocap);
-        local_vel_pub.publish(vs);
+          //ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir2.x, vir2.y, vir2.z, vir2.roll/pi*180);
+          follow(vir2,host_mocap,&vs,0,-0.5);
+          mocap_pos_pub.publish(host_mocap);
+          local_vel_pub.publish(vs);
 
         //ros::spinOnce();
-        rate.sleep();
+          rate.sleep();
     }
 
     return 0;

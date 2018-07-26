@@ -25,12 +25,16 @@
 #include <sensor_msgs/Imu.h>
 #include <eigen3/Eigen/Dense>
 #include "lpf2.h"
-
+#include <UKF/output.h>
 
 double err_sumx , err_sumy , err_sumz;
 double err_diffx , err_diffy , err_diffz;
 double last_errx,last_erry,last_errz;
-
+bool force_control;
+bool velocity_control;
+bool velocity_zero;
+int flag1 = 0;
+geometry_msgs::Point trigger;
 geometry_msgs::Point force_error, pos_error;
 const float pi = 3.1415926;
 float imu_roll, imu_pitch, imu_yaw;
@@ -44,10 +48,32 @@ float KDx = 0.01;
 float KDy = 0.01;
 float KDz = 0.01;
 bool landing;
-bool impedance_control;
-lpf2  lpfx(6,0.025);
-lpf2  lpfy(6,0.025);
+
+int current_state_zone = 0;
+int last_state_zone = 0;
+int controller_state;
+const double u_bound = 1.5;
+const double l_bound = -1.5;
+
+double time_now;
+double lastime;
+double last_updat_time;
+lpf2  lpFLx(10,0.02);
+lpf2  lpFFx(10,0.02);
 using namespace std;
+
+enum zone{
+    positive_zone = 5,
+    zero_zone = 0 ,
+    negative_zone = -5
+};
+
+enum control_state{
+  positive_engaged = 5,
+  disengaged = 0,
+  negative_engaged = -5
+};
+
 typedef struct vir
 {
     float roll;
@@ -55,7 +81,10 @@ typedef struct vir
     float y;
     float z;
 };
-
+geometry_msgs::Point leader_force;
+void leader_force_cb(const geometry_msgs::Point::ConstPtr& msg) {
+    leader_force = *msg;
+}
 sensor_msgs::Imu imu2, imu3;
 void imu2_cb(const sensor_msgs::Imu::ConstPtr& msg){
   imu2 = *msg;
@@ -239,6 +268,13 @@ uy = KPy*erry;
 uz = KPz*errz;
 uroll = KProll*err_roll;
 
+if(velocity_control){
+  ux = 0.8;
+}
+if(velocity_zero){
+  ux = 0;
+}
+
 vs->twist.linear.x = ux;
 vs->twist.linear.y = uy;
 vs->twist.linear.z = uz;
@@ -255,11 +291,14 @@ float ux, uy, uz, uroll;
 float local_x, local_y;
 float err_fx, err_fy, err_fz;
 float err_ax, err_ay, err_az;
+double FL_x, FL_y, FL_z;
+double FF_x, FF_y, FF_z;
 const float cx = 1;
 const float cy = 1;
 const float cz = 1;
-double lpf2_fx, lpf2_fy, lpf2_fz;
+double FLx_filt, FFx_filt, lpf2_fz;
 const double dt = 0.02;
+const float force_threshold = 1.5;
 err_diffx = 0;
 err_diffy = 0;
 err_diffz = 0;
@@ -274,6 +313,48 @@ if(err_roll>pi)
 err_roll = err_roll - 2*pi;
 else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
+FL_x = leader_force.x;
+FF_x = -follower_force.force.x;
+
+FLx_filt = lpFLx.filter(FL_x);
+FFx_filt = lpFFx.filter(FF_x);
+
+last_state_zone = current_state_zone;
+if(FLx_filt > u_bound){
+  current_state_zone = positive_zone;
+}else if(FLx_filt < l_bound){
+  current_state_zone = negative_zone;
+}else{
+  current_state_zone = zero_zone;
+}
+
+lastime = time_now;
+time_now = ros::Time::now().toSec();
+double delta_t = time_now - last_updat_time;
+
+if((current_state_zone == positive_zone) && (last_state_zone == zero_zone)){
+  controller_state = positive_engaged;
+  last_updat_time = time_now;
+}
+
+if((controller_state == positive_engaged) && FLx_filt < 1){
+  controller_state = disengaged;
+  vir.x = host_mocap.pose.position.x;
+  last_updat_time = time_now;
+}
+if((current_state_zone == negative_zone) && (last_state_zone == zero_zone)){
+  controller_state = negative_engaged;
+  last_updat_time = time_now;
+}
+if((controller_state == negative_engaged) && FLx_filt > -1){
+  controller_state = disengaged;
+  vir.x = host_mocap.pose.position.x;
+  last_updat_time = time_now;
+}
+//trigger.y = FLx_filt;
+trigger.z = FLx_filt;
+ROS_INFO("FL_x = %f", FLx_filt);
+ROS_INFO("FF_x = %f", FFx_filt);
 
 err_diffx = errx - last_errx;
 err_diffy = erry - last_erry;
@@ -292,10 +373,10 @@ if(follower_force.force.z == 0){
   follower_force.force.z = -1.372931;
 }
 
-lpf2_fx = lpfx.filter(follower_force.force.x);
-lpf2_fy = lpfy.filter(follower_force.force.y);
-err_fx = 0 - lpf2_fx;
-err_fy = 0 - lpf2_fy;
+//lpf2_fx = lpfx.filter(follower_force.force.x);
+//lpf2_fy = lpfy.filter(follower_force.force.y);
+//err_fx = 0 - lpf2_fx;
+//err_fy = 0 - lpf2_fy;
 err_fz = -1.372931 - follower_force.force.z;
 /*
 err_ax = 0 - drone2_ax;
@@ -308,7 +389,7 @@ pos_error.z = errz;
 force_error.x = err_fx;
 force_error.y = err_fy;
 force_error.z = err_fz;
-if(!impedance_control){
+if(!force_control){
   err_fx = 0;
   err_fy = 0;
   err_fz = 0;
@@ -317,7 +398,7 @@ if(!impedance_control){
   err_az = 0;
 }
 /*
-if(impedance_control){
+if(force_control){
   errx = 0;
   erry = 0;
 }
@@ -331,8 +412,8 @@ if(landing){
   err_az = 0;
 }
 //ROS_INFO("err:x = %f, y = %f", errx, erry);
-ROS_INFO("err:fx = %f, fy = %f, fz = %f", err_fx, err_fy, err_fz);
-ROS_INFO("err:ax = %f, ay = %f, az = %f", err_ax, err_ay, err_az);
+//ROS_INFO("err:fx = %f, fy = %f, fz = %f", err_fx, err_fy, err_fz);
+//ROS_INFO("err:ax = %f, ay = %f, az = %f", err_ax, err_ay, err_az);
 /*
   + 0.01 * err_fx
   + 0.005 * err_fy
@@ -342,6 +423,63 @@ uy = 1.5*erry + KDy*err_diffy/dt;
 uz = 1.5*errz + KDz*err_diffz/dt;
 //+ 0.05 * err_fz;
 uroll = KProll*err_roll;
+
+
+if(force_control){
+  trigger.x = 0;
+  trigger.y = 0;
+  ux = KPx*errx;
+  uy = KPy*erry;
+  uz = KPz*errz;
+//Schmitt trigger
+  if(controller_state == positive_engaged){
+    trigger.x = 4;
+    ux = 0.2 * (FLx_filt - FFx_filt);
+    //ux = 0.4 * FLx_filt;
+    if(ux > 1){
+      ux = 1;
+    }
+    flag1 = 1;
+  }
+  if(controller_state == negative_engaged){
+    trigger.x = -4;
+    ux = 0.2 * (FLx_filt - FFx_filt);
+    //ux = 0.4 * FLx_filt;
+    if(ux < -1){
+      ux = -1;
+    }
+    flag1 = 1;
+  }
+
+// force controller
+
+  if(FLx_filt > force_threshold){
+    trigger.y = 6;
+    //ux = 1 * (FLx_filt - FFx_filt);
+      if(ux > 2.8){
+        //ux = 2.8;
+                  }
+    //flag1 = 1;
+                }
+  if(FLx_filt < force_threshold && flag1 == 1){
+    //vir.x = host_mocap.pose.position.x;
+    //flag1 = 0;
+  }
+  if(FLx_filt < -force_threshold){
+    trigger.y = -6;
+    //ux = 1 * (FLx_filt - FFx_filt);
+      if(ux < -2.8){
+        //ux = -2.8;
+                  }
+    flag1 = 1;
+  }
+  if(FLx_filt > -force_threshold && flag1 == 1){
+    //vir.x = host_mocap.pose.position.x;
+    //flag1 = 0;
+  }
+
+}
+ROS_INFO("ux = %f", ux);
 
 vs->twist.linear.x = ux;
 vs->twist.linear.y = uy;
@@ -422,16 +560,19 @@ int main(int argc, char **argv)
     ros::Subscriber host_sub2 = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 1, host_pos2);
 
     ros::Publisher local_vel_pub2 = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 5);
-
+    ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 2, leader_force_cb);
     ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 1, follower_force_cb);
     ros::Publisher force_error_pub = nh.advertise<geometry_msgs::Point>("/force_error", 1);
     ros::Publisher pos_error_pub = nh.advertise<geometry_msgs::Point>("/pos_error", 1);
+    ros::Publisher trigger_pub = nh.advertise<geometry_msgs::Point>("/trigger", 1);
     // The setpoint publishing rate MUST be faster than 2Hz.
     //ros::AsyncSpinner spinner(10);
     //spinner.start();
-    ros::Rate rate(100);
+    ros::Rate rate(50);
     landing = false;
-    impedance_control = false;
+    force_control = false;
+    velocity_control = false;
+    velocity_zero = false;
     lpf2  lpf2x(6,0.02);
     lpf2  lpf2y(6,0.02);
     // Wait for FCU connection.
@@ -463,12 +604,12 @@ int main(int argc, char **argv)
     vs2.twist.angular.z = 0;
     vir1.x = 0;
     vir1.y = -0.5;
-    vir1.z = 0.5;
+    vir1.z = 0.7;
     vir1.roll = 0;
 
-    vir2.x = 0;
+    vir2.x = -0.8;
     vir2.y = -0.5;
-    vir2.z = 0.5;
+    vir2.z = 0.7;
     vir2.roll = 0;
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
@@ -571,8 +712,8 @@ int main(int argc, char **argv)
             case 68:    // key CCW(<-)
                 vir1.roll += 0.05;
                 break;
-      case 119:    // key foward
-                vir1.x += 0.05;
+            case 119:    // key foward
+                vir1.x += 1.0;
                 break;
             case 120:    // key back
                 vir1.x += -0.05;
@@ -583,43 +724,49 @@ int main(int argc, char **argv)
             case 100:    // key right
                 vir1.y -= 0.05;
                 break;
-            case 102: // tracking force (keyboard F)
-                impedance_control = true;
+            case 49: // tracking force (keyboard "1")
+                force_control = true;
                 break;
-        case 115:    // stop
-    {
-    vir1.x = 0;
-        vir1.y = -0.5;
-    vir1.z = 0;
-    vir1.roll = 0;
-
-
-    vir2.x = 0;
-        vir2.y = -0.5;
-    vir2.z = 0;
-    vir2.roll = 0;
-    landing = true;
-    impedance_control = false;
+            case 50:
+                velocity_control = true;
                 break;
-    }
-    case 108:    // close arming
-      {
-      offb_set_mode.request.custom_mode = "MANUAL";
-      set_mode_client.call(offb_set_mode);
-      arm_cmd.request.value = false;
-      arming_client.call(arm_cmd);
+            case 51:
+                velocity_zero = true;
+                break;
+            case 115:    // stop
+                {
+                //vir1.x = 0;
+                    vir1.y = -0.5;
+                vir1.z = 0;
+                vir1.roll = 0;
 
-      offb_set_mode2.request.custom_mode = "MANUAL";
-      set_mode_client2.call(offb_set_mode2);
-      arm_cmd2.request.value = false;
-      arming_client2.call(arm_cmd2);
-            break;
-      }
+
+                //vir2.x = 0;
+                    vir2.y = -0.5;
+                vir2.z = 0;
+                vir2.roll = 0;
+                landing = true;
+                //force_control = false;
+                            break;
+                }
+            case 108:    // close arming
+                {
+                offb_set_mode.request.custom_mode = "MANUAL";
+                set_mode_client.call(offb_set_mode);
+                arm_cmd.request.value = false;
+                arming_client.call(arm_cmd);
+
+                offb_set_mode2.request.custom_mode = "MANUAL";
+                set_mode_client2.call(offb_set_mode2);
+                arm_cmd2.request.value = false;
+                arming_client2.call(arm_cmd2);
+                      break;
+                }
             case 63:
                 return 0;
                 break;
-            }
-        }
+                }
+                    }
     if(vir1.roll>pi)
     vir1.roll = vir1.roll - 2*pi;
     else if(vir1.roll<-pi)
@@ -630,15 +777,16 @@ int main(int argc, char **argv)
     else if(vir2.roll<-pi)
     vir2.roll = vir2.roll + 2*pi;
         ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
-    follow_force(vir1,host_mocap,&vs,-0.8,-0.5);
-    follow_force(vir2,host_mocap2,&vs2,0.8,-0.5);
+    follow(vir1,host_mocap,&vs,-0.8,-0.5);
+    follow_force(vir2,host_mocap2,&vs2,0,-0.5);
 
         mocap_pos_pub.publish(host_mocap);
         mocap_pos_pub2.publish(host_mocap2);
         local_vel_pub.publish(vs);
         local_vel_pub2.publish(vs2);
-        force_error_pub.publish(force_error);
-        pos_error_pub.publish(pos_error);
+        //force_error_pub.publish(force_error);
+        //pos_error_pub.publish(pos_error);
+        trigger_pub.publish(trigger);
         ros::spinOnce();
         //spinner.stop();
         rate.sleep();
