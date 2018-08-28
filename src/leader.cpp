@@ -138,8 +138,8 @@ int main(int argc, char **argv)
                                 ("drone3/mavros/state", 2, state_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
                                    ("drone3/mavros/setpoint_position/local", 2);
-    ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone3/mavros/mocap/pose", 2);
+    //ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
+    //                               ("drone3/mavros/mocap/pose", 2);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
                                        ("drone3/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
@@ -155,7 +155,7 @@ int main(int argc, char **argv)
     //sss
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected) {
-  mocap_pos_pub.publish(host_mocap);
+  //mocap_pos_pub.publish(host_mocap);
         ros::spinOnce();
         rate.sleep();
     }
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
         local_vel_pub.publish(vs);
-    mocap_pos_pub.publish(host_mocap);
+    //mocap_pos_pub.publish(host_mocap);
     ros::spinOnce();
         rate.sleep();
     }
@@ -195,7 +195,7 @@ int main(int argc, char **argv)
   //ros::Time last_request(0);
 
     while (ros::ok()) {
-  mocap_pos_pub.publish(host_mocap);
+  //mocap_pos_pub.publish(host_mocap);
         if (current_state.mode != "OFFBOARD" &&
                 (ros::Time::now() - last_request > ros::Duration(5.0))) {
             if( set_mode_client.call(offb_set_mode) &&
@@ -288,7 +288,7 @@ int main(int argc, char **argv)
 
         ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
     follow(vir1,host_mocap,&vs,0,-0.5);
-        mocap_pos_pub.publish(host_mocap);
+        //mocap_pos_pub.publish(host_mocap);
         local_vel_pub.publish(vs);
 
         //ros::spinOnce();

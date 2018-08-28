@@ -21,7 +21,7 @@ mavros_msgs::VFR_HUD vfr_data;
 UKF::output output;
 geometry_msgs::Point force;
 lpf2  lpf2(6,0.02);
-
+geometry_msgs::Point drone_vel;
 void svo_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg){
   svo_pose = *msg;
 }
@@ -715,7 +715,56 @@ void correct(){
     force.y = -state_[StateMemberFy];
     force.z = -state_[StateMemberFz];
     //force.y = state_[StateMemberAz];
+    //veloctiy body to inertial
+    float roll, pitch , yaw;
+    Eigen::Matrix3f Rx, Ry, Rz;
+    Eigen::Vector3f v_inertial;
+    Eigen::Vector3f v_body;
+    Rx.setZero();
+    Ry.setZero();
+    Rz.setZero();
+    v_body.setZero();
+    v_body(0) = state_[StateMemberVx];
+    v_body(1) = state_[StateMemberVy];
+    v_body(2) = state_[StateMemberVz];
+    roll = imu_roll;
+    pitch = imu_pitch;
+    yaw = imu_yaw;
 
+    Rx(0,0) = 1;
+    Rx(1,0) = 0;
+    Rx(2,0) = 0;
+    Rx(0,1) = 0;
+    Rx(1,1) = cos(roll);
+    Rx(1,2) = -sin(roll);
+    Rx(0,2) = 0;
+    Rx(2,1) = sin(roll);
+    Rx(2,2) = cos(roll);
+
+    Ry(0,0) = cos(pitch);
+    Ry(1,0) = 0;
+    Ry(2,0) = sin(pitch);
+    Ry(0,1) = 0;
+    Ry(1,1) = 1;
+    Ry(1,2) = 0;
+    Ry(0,2) = -sin(pitch);
+    Ry(2,1) = 0;
+    Ry(2,2) = cos(pitch);
+
+    Rz(0,0) = cos(yaw);
+    Rz(1,0) = -sin(yaw);
+    Rz(2,0) = 0;
+    Rz(0,1) = sin(yaw);
+    Rz(1,1) = cos(yaw);
+    Rz(1,2) = 0;
+    Rz(0,2) = 0;
+    Rz(2,1) = 0;
+    Rz(2,2) = 1;
+
+    v_inertial = (Rz*Rx*Ry).inverse()*v_body;
+    drone_vel.x = v_inertial(0);
+    drone_vel.y = v_inertial(1);
+    drone_vel.z = v_inertial(2);
 
     // (9) Compute the new estimate error covariance P = P - (K * P_yy * K')
     estimateErrorCovariance_.noalias() -= (kalmanGainSubset * predictedMeasCovar * kalmanGainSubset.transpose());
@@ -1064,6 +1113,7 @@ int main(int argc, char **argv)
   ros::Subscriber vfr_sub = nh.subscribe<mavros_msgs::VFR_HUD>(topic_thrust, 1, vfr_cb);
   ros::Publisher output_pub = nh.advertise<UKF::output>("output", 1);
   ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("force", 1);
+  ros::Publisher vel_pub = nh.advertise<geometry_msgs::Point>("/drone_vel", 1);
   initialize();
   int count = 0;
   ros::Rate rate(50);
@@ -1084,6 +1134,7 @@ int main(int argc, char **argv)
     correct();
     output_pub.publish(output);
     force_pub.publish(force);
+    vel_pub.publish(drone_vel);
     }
 
 

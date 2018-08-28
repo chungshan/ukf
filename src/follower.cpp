@@ -87,7 +87,7 @@ else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
 FL_x = leader_force.x;
 //ROS_INFO("err_roll: %.3f",err_roll);
-ROS_INFO("FL_x = %f", FL_x);
+//ROS_INFO("FL_x = %f", FL_x);
 if(force_control){
   ux = KPy*errx;
   uy = KPy*erry;
@@ -169,27 +169,27 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
-                                ("drone2/mavros/state", 2, state_cb);
+                                ("drone1/mavros/state", 2, state_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone2/mavros/setpoint_position/local", 2);
-    ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone2/mavros/mocap/pose", 5);
+                                   ("drone1/mavros/setpoint_position/local", 2);
+    //ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
+    //                               ("drone2/mavros/mocap/pose", 5);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
-                                       ("drone2/mavros/cmd/arming");
+                                       ("drone1/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
-                                         ("drone2/mavros/set_mode");
-    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 2, host_pos);
+                                         ("drone1/mavros/set_mode");
+    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 2, host_pos);
 
-    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 2);
+    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone1/mavros/setpoint_velocity/cmd_vel", 2);
     ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 2, leader_force_cb);
     // The setpoint publishing rate MUST be faster than 2Hz.
     ros::AsyncSpinner spinner(2);
     spinner.start();
-    ros::Rate rate(100);
+    ros::Rate rate(50);
     force_control = false;
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected) {
-  mocap_pos_pub.publish(host_mocap);
+  //mocap_pos_pub.publish(host_mocap);
         ros::spinOnce();
         rate.sleep();
     }
@@ -214,7 +214,7 @@ int main(int argc, char **argv)
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
         local_vel_pub.publish(vs);
-    mocap_pos_pub.publish(host_mocap);
+    //mocap_pos_pub.publish(host_mocap);
     ros::spinOnce();
         rate.sleep();
     }
@@ -229,7 +229,7 @@ int main(int argc, char **argv)
   //ros::Time last_request(0);
 
     while (ros::ok()) {
-  mocap_pos_pub.publish(host_mocap);
+  //mocap_pos_pub.publish(host_mocap);
         if (current_state.mode != "OFFBOARD" &&
                 (ros::Time::now() - last_request > ros::Duration(5.0))) {
             if( set_mode_client.call(offb_set_mode) &&
@@ -325,7 +325,7 @@ int main(int argc, char **argv)
 
           //ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir2.x, vir2.y, vir2.z, vir2.roll/pi*180);
           follow(vir2,host_mocap,&vs,0,-0.5);
-          mocap_pos_pub.publish(host_mocap);
+          //mocap_pos_pub.publish(host_mocap);
           local_vel_pub.publish(vs);
 
         //ros::spinOnce();

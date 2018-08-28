@@ -31,11 +31,13 @@ double err_sumx , err_sumy , err_sumz;
 double err_diffx , err_diffy , err_diffz;
 double last_errx,last_erry,last_errz;
 bool force_control;
-bool velocity_control;
+bool velocity_forward;
+bool velocity_backward;
 bool velocity_zero;
 int flag1 = 0;
 geometry_msgs::Point trigger;
 geometry_msgs::Point force_error, pos_error;
+geometry_msgs::Point connector_vel;
 const float pi = 3.1415926;
 float imu_roll, imu_pitch, imu_yaw;
 float drone2_ax, drone2_ay, drone2_az;
@@ -81,6 +83,13 @@ typedef struct vir
     float y;
     float z;
 };
+geometry_msgs::TwistStamped drone2_vel;
+void drone2_vel_cb(const geometry_msgs::TwistStamped::ConstPtr& msg) {
+    drone2_vel = *msg;
+}
+void connector_vel_cb(const geometry_msgs::Point::ConstPtr& msg) {
+    connector_vel = *msg;
+}
 geometry_msgs::Point leader_force;
 void leader_force_cb(const geometry_msgs::Point::ConstPtr& msg) {
     leader_force = *msg;
@@ -268,8 +277,11 @@ uy = KPy*erry;
 uz = KPz*errz;
 uroll = KProll*err_roll;
 
-if(velocity_control){
+if(velocity_forward){
   ux = 0.8;
+}
+if(velocity_backward){
+  ux = -0.8;
 }
 if(velocity_zero){
   ux = 0;
@@ -299,6 +311,8 @@ const float cz = 1;
 double FLx_filt, FFx_filt, lpf2_fz;
 const double dt = 0.02;
 const float force_threshold = 1.5;
+double drone2_velx;
+drone2_velx = drone2_vel.twist.linear.x;
 err_diffx = 0;
 err_diffy = 0;
 err_diffz = 0;
@@ -434,8 +448,9 @@ if(force_control){
 //Schmitt trigger
   if(controller_state == positive_engaged){
     trigger.x = 4;
-    ux = 0.2 * (FLx_filt - FFx_filt);
+    ux = connector_vel.x + 0*drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
     //ux = 0.4 * FLx_filt;
+    //ux = -0.4 * FFx_filt;
     if(ux > 1){
       ux = 1;
     }
@@ -443,8 +458,9 @@ if(force_control){
   }
   if(controller_state == negative_engaged){
     trigger.x = -4;
-    ux = 0.2 * (FLx_filt - FFx_filt);
+    ux = connector_vel.x + 0*drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
     //ux = 0.4 * FLx_filt;
+    //ux = -0.4 * FFx_filt;
     if(ux < -1){
       ux = -1;
     }
@@ -535,8 +551,8 @@ int main(int argc, char **argv)
     //ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("drone3/mavros/imu/data", 2, imu3_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
                                    ("drone3/mavros/setpoint_position/local", 1);
-    ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone3/mavros/mocap/pose", 1);
+    //ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
+    //                               ("drone3/mavros/mocap/pose", 1);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
                                        ("drone3/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
@@ -551,17 +567,19 @@ int main(int argc, char **argv)
     ros::Subscriber imu_sub2 = nh.subscribe<sensor_msgs::Imu>("drone2/mavros/imu/data", 1, imu2_cb);
     ros::Publisher local_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
                                    ("drone2/mavros/setpoint_position/local", 1);
-    ros::Publisher mocap_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone2/mavros/mocap/pose", 1);
+    //ros::Publisher mocap_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
+    //                               ("drone2/mavros/mocap/pose", 1);
     ros::ServiceClient arming_client2 = nh.serviceClient<mavros_msgs::CommandBool>
                                        ("drone2/mavros/cmd/arming");
     ros::ServiceClient set_mode_client2 = nh.serviceClient<mavros_msgs::SetMode>
                                          ("drone2/mavros/set_mode");
+    ros::Subscriber drone2_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("drone2/mavros/local_position/velocity", 1, drone2_vel_cb);
     ros::Subscriber host_sub2 = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 1, host_pos2);
-
     ros::Publisher local_vel_pub2 = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 5);
+
     ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 2, leader_force_cb);
     ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 1, follower_force_cb);
+    ros::Subscriber connector_vel_sub = nh.subscribe<geometry_msgs::Point>("/connector/velocity", 1, connector_vel_cb);
     ros::Publisher force_error_pub = nh.advertise<geometry_msgs::Point>("/force_error", 1);
     ros::Publisher pos_error_pub = nh.advertise<geometry_msgs::Point>("/pos_error", 1);
     ros::Publisher trigger_pub = nh.advertise<geometry_msgs::Point>("/trigger", 1);
@@ -571,14 +589,15 @@ int main(int argc, char **argv)
     ros::Rate rate(50);
     landing = false;
     force_control = false;
-    velocity_control = false;
+    velocity_forward = false;
+    velocity_backward = false;
     velocity_zero = false;
     lpf2  lpf2x(6,0.02);
     lpf2  lpf2y(6,0.02);
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected && current_state2.connected) {
-  mocap_pos_pub.publish(host_mocap);
-  mocap_pos_pub2.publish(host_mocap2);
+  //mocap_pos_pub.publish(host_mocap);
+  //mocap_pos_pub2.publish(host_mocap2);
         ros::spinOnce();
         rate.sleep();
         ROS_INFO("ok");
@@ -615,8 +634,8 @@ int main(int argc, char **argv)
    for(int i = 100; ros::ok() && i > 0; --i){
         local_vel_pub.publish(vs);
         local_vel_pub2.publish(vs2);
-    mocap_pos_pub.publish(host_mocap);
-    mocap_pos_pub2.publish(host_mocap2);
+    //mocap_pos_pub.publish(host_mocap);
+    //mocap_pos_pub2.publish(host_mocap2);
     ros::spinOnce();
         rate.sleep();
     }
@@ -637,8 +656,8 @@ int main(int argc, char **argv)
       quaternionToRPY();
       writeInMeasurement();
       //spinner.start();
-  mocap_pos_pub.publish(host_mocap);
-  mocap_pos_pub2.publish(host_mocap2);
+  //mocap_pos_pub.publish(host_mocap);
+  //mocap_pos_pub2.publish(host_mocap2);
         if (current_state.mode != "OFFBOARD" &&
                 (ros::Time::now() - last_request > ros::Duration(5.0))) {
             if( set_mode_client.call(offb_set_mode) &&
@@ -713,7 +732,7 @@ int main(int argc, char **argv)
                 vir1.roll += 0.05;
                 break;
             case 119:    // key foward
-                vir1.x += 1.0;
+                vir1.x += 0.05;
                 break;
             case 120:    // key back
                 vir1.x += -0.05;
@@ -728,10 +747,19 @@ int main(int argc, char **argv)
                 force_control = true;
                 break;
             case 50:
-                velocity_control = true;
+                velocity_forward = true;
+                velocity_backward = false;
+                velocity_zero = false;
                 break;
             case 51:
                 velocity_zero = true;
+                velocity_forward = false;
+                velocity_backward = false;
+                break;
+            case 52:
+                velocity_backward = true;
+                velocity_zero = false;
+                velocity_forward = false;
                 break;
             case 115:    // stop
                 {
@@ -780,8 +808,8 @@ int main(int argc, char **argv)
     follow(vir1,host_mocap,&vs,-0.8,-0.5);
     follow_force(vir2,host_mocap2,&vs2,0,-0.5);
 
-        mocap_pos_pub.publish(host_mocap);
-        mocap_pos_pub2.publish(host_mocap2);
+        //mocap_pos_pub.publish(host_mocap);
+        //mocap_pos_pub2.publish(host_mocap2);
         local_vel_pub.publish(vs);
         local_vel_pub2.publish(vs2);
         //force_error_pub.publish(force_error);

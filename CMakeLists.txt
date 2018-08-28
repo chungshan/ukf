@@ -147,6 +147,9 @@ add_executable(followerr src/follower.cpp ${HEADERS_} ${SOURCES_})
 #add_executable(printkeyboard src/printkeyboard.cpp)
 add_executable(leaderfollower src/leader_follower.cpp ${HEADERS_} ${SOURCES_})
 add_executable(plotforce src/plotforce.cpp ${HEADERS_} ${SOURCES_})
+add_executable(formation_three_interaction src/formation_three_interaction.cpp)
+add_executable(formation_two_interaction src/formation_two_interaction.cpp)
+add_executable(estimate_payload src/estimate_payload.cpp)
 
 
 ## Rename C++ executable without prefix
@@ -185,6 +188,15 @@ target_link_libraries(leaderfollower
   ${catkin_LIBRARIES}
 )
 target_link_libraries(plotforce
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(formation_three_interaction
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(formation_two_interaction
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(estimate_payload
   ${catkin_LIBRARIES}
 )
 #############
