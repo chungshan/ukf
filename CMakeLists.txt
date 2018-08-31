@@ -10,7 +10,7 @@ project(UKF)
 find_package(catkin REQUIRED COMPONENTS
   diagnostic_msgs diagnostic_updater eigen_conversions geographic_msgs geometry_msgs message_filters message_generation nav_msgs roscpp roslint sensor_msgs std_msgs std_srvs tf2 tf2_geometry_msgs tf2_ros xmlrpcpp
 )
-
+find_package(Ceres REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -120,6 +120,7 @@ include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
 )
+include_directories(${CERES_INCLUDE_DIRS})
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -197,7 +198,7 @@ target_link_libraries(formation_two_interaction
   ${catkin_LIBRARIES}
 )
 target_link_libraries(estimate_payload
-  ${catkin_LIBRARIES}
+  ${catkin_LIBRARIES} ${CERES_LIBRARIES}
 )
 #############
 ## Install ##

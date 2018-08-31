@@ -151,7 +151,7 @@ int main(int argc, char **argv)
     // The setpoint publishing rate MUST be faster than 2Hz.
     ros::AsyncSpinner spinner(2);
     spinner.start();
-    ros::Rate rate(100);
+    ros::Rate rate(50);
     //sss
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected) {
