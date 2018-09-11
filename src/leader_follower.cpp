@@ -447,8 +447,8 @@ if(force_control){
   uz = KPz*errz;
 //Schmitt trigger
   if(controller_state == positive_engaged){
-    trigger.x = 4;
-    ux = connector_vel.x + 0*drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
+    trigger.x = 1.5;
+    ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
     //ux = 0.4 * FLx_filt;
     //ux = -0.4 * FFx_filt;
     if(ux > 1){
@@ -457,8 +457,8 @@ if(force_control){
     flag1 = 1;
   }
   if(controller_state == negative_engaged){
-    trigger.x = -4;
-    ux = connector_vel.x + 0*drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
+    trigger.x = -1.5;
+    ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
     //ux = 0.4 * FLx_filt;
     //ux = -0.4 * FFx_filt;
     if(ux < -1){
@@ -724,6 +724,12 @@ int main(int argc, char **argv)
             case 66:    // key down
                 vir1.z += -0.05;
                 //vir2.z += -0.05;
+                break;
+            case 56:    // key up,Num 8
+                vir2.z += 0.05;
+                break;
+            case 53:    // key down,Num 5
+                vir2.z += -0.05;
                 break;
             case 67:    // key CW(->)
                 vir1.roll -= 0.05;

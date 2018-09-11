@@ -169,18 +169,18 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
-                                ("drone1/mavros/state", 2, state_cb);
+                                ("drone2/mavros/state", 2, state_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("drone1/mavros/setpoint_position/local", 2);
+                                   ("drone2/mavros/setpoint_position/local", 2);
     //ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
     //                               ("drone2/mavros/mocap/pose", 5);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
-                                       ("drone1/mavros/cmd/arming");
+                                       ("drone2/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
-                                         ("drone1/mavros/set_mode");
-    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 2, host_pos);
+                                         ("drone2/mavros/set_mode");
+    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 2, host_pos);
 
-    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone1/mavros/setpoint_velocity/cmd_vel", 2);
+    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 2);
     ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 2, leader_force_cb);
     // The setpoint publishing rate MUST be faster than 2Hz.
     ros::AsyncSpinner spinner(2);
@@ -323,7 +323,7 @@ int main(int argc, char **argv)
           else if(vir2.roll<-pi)
           vir2.roll = vir2.roll + 2*pi;
 
-          //ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir2.x, vir2.y, vir2.z, vir2.roll/pi*180);
+          ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir2.x, vir2.y, vir2.z, vir2.roll/pi*180);
           follow(vir2,host_mocap,&vs,0,-0.5);
           //mocap_pos_pub.publish(host_mocap);
           local_vel_pub.publish(vs);
