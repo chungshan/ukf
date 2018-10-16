@@ -316,7 +316,7 @@ uroll = KProll*err_roll;
 
 if(force_control){
   ux = (fx - FL_x);
-  ux = (fy - FL_y);
+  uy = (fy - FL_y);
 }
 
 if(velocity_zero){
@@ -368,6 +368,7 @@ fx = -zy;
 fy = zx;
 
 FF_x = lpFFx.filter(-follower_force.force.x);
+FF_y = lpFFy.filter(-follower_force.force.y);
 
 drone2_velx = drone2_vel.twist.linear.x;
 err_diffx = 0;
@@ -390,7 +391,7 @@ FF_y = lpFFy.filter(-follower_force.force.y);
 
 if(force_control){
   ux = (fx - FF_x);
-  ux = (fy - FF_y);
+  uy = (fy - FF_y);
 }
 
 if(velocity_zero){
