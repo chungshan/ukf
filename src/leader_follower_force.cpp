@@ -68,6 +68,8 @@ double lastime;
 double last_updat_time;
 lpf2  lpFLx(10,0.02);
 lpf2  lpFFx(10,0.02);
+lpf2  lpFLy(10,0.02);
+lpf2  lpFFy(10,0.02);
 using namespace std;
 
 enum zone{
@@ -110,6 +112,10 @@ void imu3_cb(const sensor_msgs::Imu::ConstPtr& msg){
 UKF::output follower_force;
 void follower_force_cb(const UKF::output::ConstPtr& msg){
   follower_force = *msg;
+}
+UKF::output leader_force_est;
+void leader_force_est_cb(const UKF::output::ConstPtr& msg){
+  leader_force_est = *msg;
 }
 
 mavros_msgs::State current_state, current_state2;
@@ -263,6 +269,28 @@ float errx, erry, errz, err_roll;
 float ux, uy, uz, uroll;
 //float dis_x = 0, dis_y = -0.5;
 float local_x, local_y;
+double pcl_x, pcl_y, pcl_z;
+double pcf_x, pcf_y, pcf_z;
+double pg_x, pg_y, pg_z;
+double zx, zy, zz;
+double fx, fy, fz;
+double FL_x, FL_y;
+
+FL_x = lpFLx.filter(-leader_force_est.force.x);
+FL_y = lpFLy.filter(-leader_force_est.force.y);
+pg_x = 0.5*(pcl_x + pcf_x);
+pg_y = 0.5*(pcl_y + pcf_y);
+pg_z = 0.5*(pcl_z + pcf_z);
+
+zx = (pcl_x - pg_x);
+zy = (pcl_y - pg_y);
+zz = (pcl_z - pg_z);
+
+fx = -zy;
+fy = zx;
+
+
+
 
 local_x = cos(vir.roll)*dis_x+sin(vir.roll)*dis_y;
 local_y = -sin(vir.roll)*dis_x+cos(vir.roll)*dis_y;
@@ -276,41 +304,27 @@ err_roll = err_roll - 2*pi;
 else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
 
+
+
+
 //ROS_INFO("err_roll: %.3f",err_roll);
-if(velocity_zero){
-  ux = 0;
-  uy = 0;
-  uz = 0;
-}
+
 ux = KPx*errx;
 uy = KPy*erry;
 uz = KPz*errz;
 uroll = KProll*err_roll;
 
-if(velocity_forward){
-  ux = 0.8;
-}
-if(velocity_backward){
-  ux = -0.8;
+if(force_control){
+  ux = (fx - FL_x);
+  ux = (fy - FL_y);
 }
 
-if(velocity_upward){
-  uz = 0.8;
+if(velocity_zero){
+  ux = 0;
+  uy = 0;
+  uz = 0;
 }
-if(velocity_downward){
-  uz = -0.8;
-}
-if(velocity_leftward){
-  uy = 0.8;
-}
-if(velocity_rightward){
-  uy = -0.8;
-}
-if(velocity_circle){
-  ux = -2.5*sin(theta_c);
-  uy = 2.5*cos(theta_c);
-  theta_c += 0.03;
-}
+
 vs->twist.linear.x = ux;
 vs->twist.linear.y = uy;
 vs->twist.linear.z = uz;
@@ -327,7 +341,6 @@ float ux, uy, uz, uroll;
 float local_x, local_y;
 float err_fx, err_fy, err_fz;
 float err_ax, err_ay, err_az;
-double FL_x, FL_y, FL_z;
 double FF_x, FF_y, FF_z;
 const float cx = 1;
 const float cy = 1;
@@ -336,6 +349,26 @@ double FLx_filt, FFx_filt, lpf2_fz;
 const double dt = 0.02;
 const float force_threshold = 1.5;
 double drone2_velx;
+
+double pcl_x, pcl_y, pcl_z;
+double pcf_x, pcf_y, pcf_z;
+double pg_x, pg_y, pg_z;
+double zx, zy, zz;
+double fx, fy, fz;
+
+pg_x = 0.5*(pcl_x + pcf_x);
+pg_y = 0.5*(pcl_y + pcf_y);
+pg_z = 0.5*(pcl_z + pcf_z);
+
+zx = (pcf_x - pg_x);
+zy = (pcf_y - pg_y);
+zz = (pcf_z - pg_z);
+
+fx = -zy;
+fy = zx;
+
+FF_x = lpFFx.filter(-follower_force.force.x);
+
 drone2_velx = drone2_vel.twist.linear.x;
 err_diffx = 0;
 err_diffy = 0;
@@ -351,173 +384,19 @@ if(err_roll>pi)
 err_roll = err_roll - 2*pi;
 else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
-FL_x = leader_force.x;
-FF_x = -follower_force.force.x;
-
-FLx_filt = lpFLx.filter(FL_x);
-FFx_filt = lpFFx.filter(FF_x);
-
-last_state_zone = current_state_zone;
-if(FLx_filt > u_bound){
-  current_state_zone = positive_zone;
-}else if(FLx_filt < l_bound){
-  current_state_zone = negative_zone;
-}else{
-  current_state_zone = zero_zone;
-}
-
-lastime = time_now;
-time_now = ros::Time::now().toSec();
-double delta_t = time_now - last_updat_time;
-
-if((current_state_zone == positive_zone) && (last_state_zone == zero_zone)){
-  controller_state = positive_engaged;
-  last_updat_time = time_now;
-}
-
-if((controller_state == positive_engaged) && FLx_filt < 1){
-  controller_state = disengaged;
-  vir.x = host_mocap.pose.position.x;
-  last_updat_time = time_now;
-}
-if((current_state_zone == negative_zone) && (last_state_zone == zero_zone)){
-  controller_state = negative_engaged;
-  last_updat_time = time_now;
-}
-if((controller_state == negative_engaged) && FLx_filt > -1){
-  controller_state = disengaged;
-  vir.x = host_mocap.pose.position.x;
-  last_updat_time = time_now;
-}
-//trigger.y = FLx_filt;
-trigger.z = FLx_filt;
-ROS_INFO("FL_x = %f", FLx_filt);
-ROS_INFO("FF_x = %f", FFx_filt);
-
-err_diffx = errx - last_errx;
-err_diffy = erry - last_erry;
-err_diffz = errz - last_errz;
-
-last_errx = errx;
-last_erry = erry;
-last_errz = errz;
-
-err_sumx = err_sumx + errx;
-err_sumy = err_sumy + erry;
-err_sumz = err_sumz + errz;
-
-//ROS_INFO("err_roll: %.3f",err_roll);
-if(follower_force.force.z == 0){
-  follower_force.force.z = -1.372931;
-}
-
-//lpf2_fx = lpfx.filter(follower_force.force.x);
-//lpf2_fy = lpfy.filter(follower_force.force.y);
-//err_fx = 0 - lpf2_fx;
-//err_fy = 0 - lpf2_fy;
-err_fz = -1.372931 - follower_force.force.z;
-/*
-err_ax = 0 - drone2_ax;
-err_ay = 0 - drone2_ay;
-err_az = 0 - drone2_az;
-*/
-pos_error.x = errx;
-pos_error.y = erry;
-pos_error.z = errz;
-force_error.x = err_fx;
-force_error.y = err_fy;
-force_error.z = err_fz;
-if(!force_control){
-  err_fx = 0;
-  err_fy = 0;
-  err_fz = 0;
-  err_ax = 0;
-  err_ay = 0;
-  err_az = 0;
-}
-/*
-if(force_control){
-  errx = 0;
-  erry = 0;
-}
-*/
-if(landing){
-  err_fx = 0;
-  err_fy = 0;
-  err_fz = 0;
-  err_ax = 0;
-  err_ay = 0;
-  err_az = 0;
-}
-//ROS_INFO("err:x = %f, y = %f", errx, erry);
-//ROS_INFO("err:fx = %f, fy = %f, fz = %f", err_fx, err_fy, err_fz);
-//ROS_INFO("err:ax = %f, ay = %f, az = %f", err_ax, err_ay, err_az);
-/*
-  + 0.01 * err_fx
-  + 0.005 * err_fy
- */
-ux = 1.5*errx + KDx*err_diffx/dt;
-uy = 1.5*erry + KDy*err_diffy/dt;
-uz = 1.5*errz + KDz*err_diffz/dt;
-//+ 0.05 * err_fz;
-uroll = KProll*err_roll;
+FF_x = lpFFx.filter(-follower_force.force.x);
+FF_y = lpFFy.filter(-follower_force.force.y);
 
 
 if(force_control){
-  trigger.x = 0;
-  trigger.y = 0;
-  ux = KPx*errx;
-  uy = KPy*erry;
-  uz = KPz*errz;
-//Schmitt trigger
-  if(controller_state == positive_engaged){
-    trigger.x = 1.5;
-    ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
-    //ux = 0.4 * FLx_filt;
-    //ux = -0.4 * FFx_filt;
-    if(ux > 1){
-      ux = 1;
-    }
-    flag1 = 1;
-  }
-  if(controller_state == negative_engaged){
-    trigger.x = -1.5;
-    ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
-    //ux = 0.4 * FLx_filt;
-    //ux = -0.4 * FFx_filt;
-    if(ux < -1){
-      ux = -1;
-    }
-    flag1 = 1;
-  }
+  ux = (fx - FF_x);
+  ux = (fy - FF_y);
+}
 
-// force controller
-
-  if(FLx_filt > force_threshold){
-    trigger.y = 6;
-    //ux = 1 * (FLx_filt - FFx_filt);
-      if(ux > 2.8){
-        //ux = 2.8;
-                  }
-    //flag1 = 1;
-                }
-  if(FLx_filt < force_threshold && flag1 == 1){
-    //vir.x = host_mocap.pose.position.x;
-    //flag1 = 0;
-  }
-  if(FLx_filt < -force_threshold){
-    trigger.y = -6;
-    //ux = 1 * (FLx_filt - FFx_filt);
-      if(ux < -2.8){
-        //ux = -2.8;
-                  }
-    flag1 = 1;
-  }
-  if(FLx_filt > -force_threshold && flag1 == 1){
-    //vir.x = host_mocap.pose.position.x;
-    //flag1 = 0;
-  }
-
+if(velocity_zero){
+  ux = 0;
+  uy = 0;
+  uz = 0;
 }
 ROS_INFO("ux = %f", ux);
 
@@ -567,7 +446,7 @@ char getch()
  */
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "follow_test");
+    ros::init(argc, argv, "leader_follower_force");
     ros::NodeHandle nh;
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
@@ -603,6 +482,7 @@ int main(int argc, char **argv)
 
     ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 2, leader_force_cb);
     ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 1, follower_force_cb);
+    ros::Subscriber leader_force_est_sub = nh.subscribe<UKF::output>("/leader_ukf/output", 1, leader_force_est_cb);
     ros::Subscriber connector_vel_sub = nh.subscribe<geometry_msgs::Point>("/connector/velocity", 1, connector_vel_cb);
     ros::Publisher force_error_pub = nh.advertise<geometry_msgs::Point>("/force_error", 1);
     ros::Publisher pos_error_pub = nh.advertise<geometry_msgs::Point>("/pos_error", 1);
@@ -650,12 +530,12 @@ int main(int argc, char **argv)
     vs2.twist.angular.x = 0;
     vs2.twist.angular.y = 0;
     vs2.twist.angular.z = 0;
-    vir1.x = 1.6;
+    vir1.x = 0.8;
     vir1.y = 0;
     vir1.z = 0.7;
     vir1.roll = 0;
 
-    vir2.x = 0.0;
+    vir2.x = -0.8;
     vir2.y = 0;
     vir2.z = 0.7;
     vir2.roll = 0;

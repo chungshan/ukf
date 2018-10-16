@@ -194,7 +194,7 @@ void transformation_model(){
   follower_wz = follower_imu.angular_velocity.z;
 
 
-
+  ROS_INFO("leader_vx = %f, leader_vy = %f, leader_vz = %f", leader_vx, leader_vy, leader_vz);
   h_g.resize(8,8);
   h_g.setZero();
   h_g << 0, leader_wx - follower_wx, leader_wy - follower_wy, leader_wz - follower_wz, 0, 0, 0, 0,
@@ -206,10 +206,17 @@ void transformation_model(){
          follower_vy - leader_vy, (leader_vz + follower_vz), 0, -(leader_vx + follower_vx), follower_wy - leader_wy, (leader_wz + follower_wz), 0, -(leader_wx + follower_wx),
          follower_vz - leader_vz, -(leader_vy + follower_vy), (leader_vx + follower_vx), 0, follower_wz - leader_wz, -(leader_wy + follower_wy), (leader_wx + follower_wx), 0;
   //ROS_INFO("qji_k[5] = %f", qji_k(5));
+  /*
+  ROS_INFO("--------h_g------------");
+  std::cout << h_g << std::endl;
 
   transform_hkxk = h_g * qji_k;
+  ROS_INFO("--------transformhkxk------------");
+  std::cout << transform_hkxk << std::endl;
+  */
   //P_k.inverse() + h_g.transpose()*R_k.inverse*h_g
   P_k = lamda*(P_k.inverse() + h_g.transpose()*R_k.inverse()*h_g).inverse();
+
   /*
   Eigen::MatrixXd S(8,8);
   Eigen::MatrixXd K(8,8);
@@ -501,10 +508,12 @@ struct F1_v {
    }
 };
 
+
+
 struct F1_m {
    template <typename T>
    bool operator()(const T* const x, T* residual) const {
-     residual[0] = ((x[0] - m_k) * P_k_m_inverse * (x[0] - m_k))*0.5
+     residual[0] = ((x[0] - m_k) * P_k_m_inverse * (x[0] - m_k))
                    +(((y_m(0)-hkxk_m(0))*R_k_m_inverse(0,0) + (y_m(1) - hkxk_m(1))*R_k_m_inverse(1,0) + (y_m(2) - hkxk_m(2))*R_k_m_inverse(2,0)) * (y_m(0) - hkxk_m(0))
                    +((y_m(0)-hkxk_m(0))*R_k_m_inverse(0,1) + (y_m(1) - hkxk_m(1))*R_k_m_inverse(1,1) + (y_m(2) - hkxk_m(2)*R_k_m_inverse(2,1))) * (y_m(1) - hkxk_m(1))
                    +((y_m(0)-hkxk_m(0))*R_k_m_inverse(0,2) + (y_m(1) - hkxk_m(1))*R_k_m_inverse(1,2) + (y_m(2) - hkxk_m(2)*R_k_m_inverse(2,2))) * (y_m(2) - hkxk_m(2)))*0.5;
@@ -558,7 +567,7 @@ int main(int argc, char **argv)
   //initial qji
   double x1[] = {1.0, 0.2, 0.3, 0.2, 0.0, 3.0, 1.0, 1.0};
 
-  double qji[] = {1.0, 0.3, 0.3, 0.3, 0.0, 3.0, 1.0, 1.0};
+  double qji[] = {1.0, 0.0, 0.0, 0.0, 0.0, 3.0, 1.0, 1.0};
   double m = 0.1;
   double m_old, m_initial;
   int count_m = 0;
@@ -600,7 +609,7 @@ int main(int argc, char **argv)
         << "Invalid minimizer: " << FLAGS_minimizer
         << ", valid options are: trust_region and line_search.";
         */
-    options_m.max_num_iterations = 15;
+    options_m.max_num_iterations = 20;
     options_m.linear_solver_type = ceres::DENSE_QR;
     options_m.minimizer_progress_to_stdout = true;
     //options.check_gradients = true;
@@ -614,6 +623,7 @@ int main(int argc, char **argv)
       ros::shutdown();
     }
 */
+    //std::cout << summary_m.BriefReport() << "\n";
 
     //ROS_INFO("m = %.8f", m);
     //ROS_INFO("m_old = %.8f", m_old);
@@ -662,6 +672,10 @@ int main(int argc, char **argv)
     double up = 3;
     double low = 1;
     vector<int> qji4_const_v;
+    qji4_const_v.insert(qji4_const_v.end(), 0);
+    qji4_const_v.insert(qji4_const_v.end(), 1);
+    qji4_const_v.insert(qji4_const_v.end(), 2);
+    qji4_const_v.insert(qji4_const_v.end(), 3);
     qji4_const_v.insert(qji4_const_v.end(), 4);
     problem.AddResidualBlock(new AutoDiffCostFunction<F1_v, 1, 8>(new F1_v),
                                NULL,
@@ -689,30 +703,33 @@ int main(int argc, char **argv)
     options.max_num_iterations = 100;
     options.linear_solver_type = ceres::DENSE_QR;
     options.minimizer_progress_to_stdout = true;
+    //options.use_nonmonotonic_steps = true;
     //options.trust_region_strategy_type = ceres::DOGLEG;
     //options.use_nonmonotonic_steps = true;
     //options.function_tolerance = 1e-9;
     //options.max_line_search_step_contraction = 1e-1;
     Solver::Summary summary;
     Solve(options, &problem, &summary);
-/*
+
     std::cout << summary.BriefReport() << "\n";
+    /*
     std::cout << "qji_x : " << qji_k
               << " -> " << qji << "\n";
 */
     //qji_d_x_k = qji_d_x;
     //qji_k = qji;
-    /*
+
     ROS_INFO("------------------------------------");
     ROS_INFO("tx = %f, ty = %f, tz = %f", qji[5], qji[6], qji[7]);
     ROS_INFO("qw = %f, qx = %f, qy = %f, qz = %f", qji[0],qji[1],qji[2],qji[3]);
     ROS_INFO("------------------------------------");
-    */
+
     plot_x.x = qji[5];
+    plot_x.y = 1.6;
     plot_pub.publish(plot_x);
-    ROS_INFO("---------------------");
-    ROS_INFO("qjir_w = %f, qjir_x = %f, qjir_y = %f, qjir_z = %f", qji[0], qji[1], qji[2], qji[3]);
-    ROS_INFO("qjid_w = %f, qjid_x = %f, qjid_y = %f, qjid_z = %f", qji[4], qji[5], qji[6], qji[7]);
+    //ROS_INFO("---------------------");
+    //ROS_INFO("qjir_w = %f, qjir_x = %f, qjir_y = %f, qjir_z = %f", qji[0], qji[1], qji[2], qji[3]);
+    //ROS_INFO("qjid_w = %f, qjid_x = %f, qjid_y = %f, qjid_z = %f", qji[4], qji[5], qji[6], qji[7]);
     qji_k(0) = qji[0];
     qji_k(1) = qji[1];
     qji_k(2) = qji[2];
@@ -788,9 +805,9 @@ int main(int argc, char **argv)
     qji_7_old = qji[7];
 
     qji[0] = 1.0;
-    qji[1] = 0.3;
-    qji[2] = 0.3;
-    qji[3] = 0.3;
+    qji[1] = 0.0;
+    qji[2] = 0.0;
+    qji[3] = 0.0;
     qji[4] = 0.0;
     qji[5] = 3.0;
     qji[6] = 1.0;

@@ -151,6 +151,9 @@ add_executable(plotforce src/plotforce.cpp ${HEADERS_} ${SOURCES_})
 add_executable(formation_three_interaction src/formation_three_interaction.cpp)
 add_executable(formation_two_interaction src/formation_two_interaction.cpp)
 add_executable(estimate_payload src/estimate_payload.cpp)
+add_executable(estimate_payload_v2 src/estimate_payload_v2.cpp ${HEADERS_} ${SOURCES_})
+add_executable(light src/light.cpp)
+add_executable(leader_follower_force src/leader_follower_force.cpp ${HEADERS_} ${SOURCES_})
 
 
 ## Rename C++ executable without prefix
@@ -199,6 +202,15 @@ target_link_libraries(formation_two_interaction
 )
 target_link_libraries(estimate_payload
   ${catkin_LIBRARIES} ${CERES_LIBRARIES}
+)
+target_link_libraries(estimate_payload_v2
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(light
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(leader_follower_force
+  ${catkin_LIBRARIES}
 )
 #############
 ## Install ##
