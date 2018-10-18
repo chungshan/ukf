@@ -125,7 +125,7 @@ void state_cb(const mavros_msgs::State::ConstPtr& msg) {
 void state_cb2(const mavros_msgs::State::ConstPtr& msg) {
     current_state2 = *msg;
 }
-geometry_msgs::PoseStamped host_mocap, host_mocap2;
+geometry_msgs::PoseStamped host_mocap, host_mocap2, contact_pf, contact_pl;
 void host_pos(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
   host_mocap = *msg;
@@ -133,6 +133,14 @@ void host_pos(const geometry_msgs::PoseStamped::ConstPtr& msg)
 void host_pos2(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
   host_mocap2 = *msg;
+}
+void contact_pf_cb(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{
+  contact_pf = *msg;
+}
+void contact_pl_cb(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{
+  contact_pl = *msg;
 }
 float qua2eul(geometry_msgs::PoseStamped& host_mocap)
 {
@@ -278,6 +286,15 @@ double FL_x, FL_y;
 
 FL_x = lpFLx.filter(-leader_force_est.force.x);
 FL_y = lpFLy.filter(-leader_force_est.force.y);
+
+pcl_x = contact_pl.pose.position.x;
+pcl_y = contact_pl.pose.position.y;
+pcl_z = contact_pl.pose.position.z;
+
+pcf_x = contact_pf.pose.position.x;
+pcf_y = contact_pf.pose.position.y;
+pcf_z = contact_pf.pose.position.z;
+
 pg_x = 0.5*(pcl_x + pcf_x);
 pg_y = 0.5*(pcl_y + pcf_y);
 pg_z = 0.5*(pcl_z + pcf_z);
@@ -315,14 +332,20 @@ uz = KPz*errz;
 uroll = KProll*err_roll;
 
 if(force_control){
-  ux = (fx - FL_x);
-  uy = (fy - FL_y);
+  ux = fx;
+  uy = fy;
 }
 
+if(velocity_leftward){
+  uy = 0.8;
+}
+if(velocity_rightward){
+  uy = -0.8;
+}
 if(velocity_zero){
   ux = 0;
   uy = 0;
-  uz = 0;
+
 }
 
 vs->twist.linear.x = ux;
@@ -356,6 +379,14 @@ double pg_x, pg_y, pg_z;
 double zx, zy, zz;
 double fx, fy, fz;
 
+pcl_x = contact_pl.pose.position.x;
+pcl_y = contact_pl.pose.position.y;
+pcl_z = contact_pl.pose.position.z;
+
+pcf_x = contact_pf.pose.position.x;
+pcf_y = contact_pf.pose.position.y;
+pcf_z = contact_pf.pose.position.z;
+
 pg_x = 0.5*(pcl_x + pcf_x);
 pg_y = 0.5*(pcl_y + pcf_y);
 pg_z = 0.5*(pcl_z + pcf_z);
@@ -388,16 +419,19 @@ err_roll = err_roll + 2*pi;
 FF_x = lpFFx.filter(-follower_force.force.x);
 FF_y = lpFFy.filter(-follower_force.force.y);
 
+ux = KPx*errx;
+uy = KPy*erry;
+uz = KPz*errz;
+uroll = KProll*err_roll;
 
 if(force_control){
-  ux = (fx - FF_x);
-  uy = (fy - FF_y);
+  ux = fx;
+  uy = fy;
 }
 
 if(velocity_zero){
   ux = 0;
   uy = 0;
-  uz = 0;
 }
 ROS_INFO("ux = %f", ux);
 
@@ -488,6 +522,11 @@ int main(int argc, char **argv)
     ros::Publisher force_error_pub = nh.advertise<geometry_msgs::Point>("/force_error", 1);
     ros::Publisher pos_error_pub = nh.advertise<geometry_msgs::Point>("/pos_error", 1);
     ros::Publisher trigger_pub = nh.advertise<geometry_msgs::Point>("/trigger", 1);
+
+    ros::Subscriber contact_pf_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 1, contact_pf_cb);
+    ros::Subscriber contact_pl_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody4/pose", 1, contact_pl_cb);
+
+
     // The setpoint publishing rate MUST be faster than 2Hz.
     //ros::AsyncSpinner spinner(10);
     //spinner.start();

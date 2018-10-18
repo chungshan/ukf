@@ -154,7 +154,7 @@ add_executable(estimate_payload src/estimate_payload.cpp)
 add_executable(estimate_payload_v2 src/estimate_payload_v2.cpp ${HEADERS_} ${SOURCES_})
 add_executable(light src/light.cpp)
 add_executable(leader_follower_force src/leader_follower_force.cpp ${HEADERS_} ${SOURCES_})
-
+add_executable(estimate_payload_v3 src/estimate_payload_v3.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -210,6 +210,9 @@ target_link_libraries(light
   ${catkin_LIBRARIES}
 )
 target_link_libraries(leader_follower_force
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(estimate_payload_v3
   ${catkin_LIBRARIES}
 )
 #############
