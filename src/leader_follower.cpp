@@ -68,6 +68,8 @@ double lastime;
 double last_updat_time;
 lpf2  lpFLx(10,0.02);
 lpf2  lpFFx(10,0.02);
+lpf2 lpFLy(10,0.02);
+lpf2 lpFFy(10,0.02);
 using namespace std;
 
 enum zone{
@@ -277,15 +279,19 @@ else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
 
 //ROS_INFO("err_roll: %.3f",err_roll);
-if(velocity_zero){
-  ux = 0;
-  uy = 0;
-  uz = 0;
-}
+
+
+
 ux = KPx*errx;
 uy = KPy*erry;
 uz = KPz*errz;
 uroll = KProll*err_roll;
+
+if(velocity_zero){
+  ux = 0;
+  uy = 0;
+
+}
 
 if(velocity_forward){
   ux = 0.8;
@@ -333,10 +339,12 @@ const float cx = 1;
 const float cy = 1;
 const float cz = 1;
 double FLx_filt, FFx_filt, lpf2_fz;
+double FLy_filt, FFy_filt;
 const double dt = 0.02;
 const float force_threshold = 1.5;
-double drone2_velx;
+double drone2_velx, drone2_vely;
 drone2_velx = drone2_vel.twist.linear.x;
+drone2_vely = drone2_vel.twist.linear.y;
 err_diffx = 0;
 err_diffy = 0;
 err_diffz = 0;
@@ -353,9 +361,16 @@ else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
 FL_x = leader_force.x;
 FF_x = -follower_force.force.x;
+FL_y = leader_force.y;
+FF_y = -follower_force.force.y;
 
 FLx_filt = lpFLx.filter(FL_x);
 FFx_filt = lpFFx.filter(FF_x);
+
+FLy_filt = lpFLy.filter(FL_y);
+FFy_filt = lpFFy.filter(FF_y);
+
+
 
 last_state_zone = current_state_zone;
 if(FLx_filt > u_bound){
@@ -473,20 +488,28 @@ if(force_control){
   if(controller_state == positive_engaged){
     trigger.x = 1.5;
     ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
+    uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
     //ux = 0.4 * FLx_filt;
     //ux = -0.4 * FFx_filt;
     if(ux > 1){
       ux = 1;
+    }
+    if(uy >1){
+      uy = 1;
     }
     flag1 = 1;
   }
   if(controller_state == negative_engaged){
     trigger.x = -1.5;
     ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
+    uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
     //ux = 0.4 * FLx_filt;
     //ux = -0.4 * FFx_filt;
     if(ux < -1){
       ux = -1;
+    }
+    if(uy < -1){
+      uy = -1;
     }
     flag1 = 1;
   }
@@ -650,12 +673,12 @@ int main(int argc, char **argv)
     vs2.twist.angular.x = 0;
     vs2.twist.angular.y = 0;
     vs2.twist.angular.z = 0;
-    vir1.x = 1.6;
+    vir1.x = 0.8;
     vir1.y = 0;
     vir1.z = 0.7;
     vir1.roll = 0;
 
-    vir2.x = 0.0;
+    vir2.x = -0.8;
     vir2.y = 0;
     vir2.z = 0.7;
     vir2.roll = 0;
@@ -803,7 +826,7 @@ int main(int argc, char **argv)
             case 117: // U
                 velocity_upward = true;
                 velocity_zero = false;
-                velocity_forward = false;
+                velocity_downward = false;
                 break;
             case 106: // J
                 velocity_downward = true;
@@ -837,7 +860,7 @@ int main(int argc, char **argv)
                 vir2.roll = 0;
                 landing = true;
                 velocity_circle = false;
-                //force_control = false;
+                force_control = false;
                             break;
                 }
             case 108:    // close arming

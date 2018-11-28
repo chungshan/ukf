@@ -25,16 +25,18 @@ double qji_d_w, qji_d_x, qji_d_y, qji_d_z;
 
 double qji_r_w_k, qji_r_x_k, qji_r_y_k, qji_r_z_k;
 double qji_d_w_k, qji_d_x_k, qji_d_y_k, qji_d_z_k;
-Eigen::VectorXd qji_k(8);
+Eigen::VectorXd qji_k(8), inertia_k(6);
 //Eigen::VectorXd qji(8);
 //vector<double*> qji;
 //double qji[8];
 Eigen::VectorXd transform_hkxk(8);
 Eigen::MatrixXd h_g(8,8);
 
-Eigen::MatrixXd P_k(8,8), P_k_inverse(8,8), R_k_inverse(8,8);
+Eigen::MatrixXd P_k(8,8), P_k_inverse(8,8), R_k_inverse(8,8), P_k_inverse_i(6,6), R_k_inverse_i(3,3);
 Eigen::MatrixXd R_k(8,8);
 Eigen::VectorXd y_k(8);
+Eigen::MatrixXd P_k_inertia(6,6);
+
 //transformation
 
 int flag = 0;
@@ -111,7 +113,18 @@ void initial(){
          0, 0, 0, 0, 0, 1, 0, 0,
          0, 0, 0, 0, 0, 0, 1, 0,
          0, 0, 0, 0, 0, 0, 0, 1;
+
+  P_k_inertia << 1, 0, 0, 0, 0, 0,
+                 0, 1, 0, 0, 0, 0,
+                 0, 0, 1, 0, 0, 0,
+                 0, 0, 0, 1, 0, 0,
+                 0, 0, 0, 0, 1, 0,
+                 0, 0, 0, 0, 0, 1;
+  R_k_inverse_i << 10, 0, 0,
+                   0, 10, 0,
+                   0, 0, 10;
   R_k_inverse = R_k.inverse();
+  ROS_INFO("ok");
 
   //y_k.setZero();
   qji_k << 1, 0, 0, 0, 0, 0, 0, 0;
@@ -194,7 +207,7 @@ void transformation_model(){
   follower_wz = follower_imu.angular_velocity.z;
 
 
-  ROS_INFO("leader_vx = %f, leader_vy = %f, leader_vz = %f", leader_vx, leader_vy, leader_vz);
+  //ROS_INFO("leader_vx = %f, leader_vy = %f, leader_vz = %f", leader_vx, leader_vy, leader_vz);
   h_g.resize(8,8);
   h_g.setZero();
   h_g << 0, leader_wx - follower_wx, leader_wy - follower_wy, leader_wz - follower_wz, 0, 0, 0, 0,
@@ -288,7 +301,8 @@ void p_model(){
   y_pc = -F_i_T*(w_i.cross(v_i) + a_i);
   y_pc = h_pc * p_ic;
 }
-
+  Eigen::Vector3d y_I;
+  Eigen::Vector3d hI_Ii;
 void inertia_model(){
   double alpha_x, alpha_y, alpha_z;
   double w_x, w_y, w_z;
@@ -300,8 +314,8 @@ void inertia_model(){
   Eigen::MatrixXd H_I(3,6);
   Eigen::Vector3d F_i;
   Eigen::Vector3d p_ic;
-  Eigen::Vector3d y_I;
 
+  double lamda = 1.004;
   I << I_xx, I_yy, I_zz, I_xy, I_xz, I_yz;
   H_I << alpha_x, -w_y*w_z, w_y*w_z, alpha_y - w_x*w_z, alpha_z+w_x*w_y, w_y*w_y-w_z*w_z,
          w_x*w_z, alpha_y, -w_x*w_z, alpha_x + w_y*w_z, w_z*w_z-w_x*w_x, alpha_z - w_x*w_y,
@@ -309,9 +323,9 @@ void inertia_model(){
   F_i << F_x, F_y, F_z;
   p_ic << p_x, p_y, p_z;
 
+  P_k = lamda*(P_k_inertia.inverse() + H_I.transpose()*R_k_inverse_i.inverse()*H_I).inverse();
   y_I = F_i.cross(p_ic);
-  y_I = H_I * I;
-
+  hI_Ii = H_I * I;
 }
 double w_x_old, w_y_old, w_z_old;
 void m_model(){
@@ -508,7 +522,22 @@ struct F1_v {
    }
 };
 
+struct F1_inertia {
+   template <typename T>
+   bool operator()(const T* const x, T* residual) const {
+     residual[0] = ((x[0]-inertia_k(0))*P_k_inverse_i(0,0) + (x[1]-inertia_k(1))*P_k_inverse_i(1,0) + (x[2]-inertia_k(2))*P_k_inverse_i(2,0) + (x[3]-inertia_k(3))*P_k_inverse_i(3,0) + (x[4]-inertia_k(4))*P_k_inverse_i(4,0) + (x[5]-inertia_k(5))*P_k_inverse_i(5,0))
+                  +((x[0]-inertia_k(0))*P_k_inverse_i(0,1) + (x[1]-inertia_k(1))*P_k_inverse_i(1,1) + (x[2]-inertia_k(2))*P_k_inverse_i(2,1) + (x[3]-inertia_k(3))*P_k_inverse_i(3,1) + (x[4]-inertia_k(4))*P_k_inverse_i(4,1) + (x[5]-inertia_k(5))*P_k_inverse_i(5,1))
+                  +((x[0]-inertia_k(0))*P_k_inverse_i(0,2) + (x[1]-inertia_k(1))*P_k_inverse_i(1,2) + (x[2]-inertia_k(2))*P_k_inverse_i(2,2) + (x[3]-inertia_k(3))*P_k_inverse_i(3,2) + (x[4]-inertia_k(4))*P_k_inverse_i(4,2) + (x[5]-inertia_k(5))*P_k_inverse_i(5,2))
+                  +((x[0]-inertia_k(0))*P_k_inverse_i(0,3) + (x[1]-inertia_k(1))*P_k_inverse_i(1,3) + (x[2]-inertia_k(2))*P_k_inverse_i(2,3) + (x[3]-inertia_k(3))*P_k_inverse_i(3,3) + (x[4]-inertia_k(4))*P_k_inverse_i(4,3) + (x[5]-inertia_k(5))*P_k_inverse_i(5,3))
+                  +((x[0]-inertia_k(0))*P_k_inverse_i(0,4) + (x[1]-inertia_k(1))*P_k_inverse_i(1,4) + (x[2]-inertia_k(2))*P_k_inverse_i(2,4) + (x[3]-inertia_k(3))*P_k_inverse_i(3,4) + (x[4]-inertia_k(4))*P_k_inverse_i(4,4) + (x[5]-inertia_k(5))*P_k_inverse_i(5,4))
+                  +((x[0]-inertia_k(0))*P_k_inverse_i(0,5) + (x[1]-inertia_k(1))*P_k_inverse_i(1,5) + (x[2]-inertia_k(2))*P_k_inverse_i(2,5) + (x[3]-inertia_k(3))*P_k_inverse_i(3,5) + (x[4]-inertia_k(4))*P_k_inverse_i(4,5) + (x[5]-inertia_k(5))*P_k_inverse_i(5,5))
+                  +((y_I(0)-hI_Ii(0))*R_k_inverse_i(0,0) + (y_I(1)-hI_Ii(1))*R_k_inverse_i(1,0) + (y_I(2)-hI_Ii(2))*R_k_inverse_i(2,0))
+                  +((y_I(0)-hI_Ii(0))*R_k_inverse_i(0,1) + (y_I(1)-hI_Ii(1))*R_k_inverse_i(1,1) + (y_I(2)-hI_Ii(2))*R_k_inverse_i(2,1))
+                  +((y_I(0)-hI_Ii(0))*R_k_inverse_i(0,2) + (y_I(1)-hI_Ii(1))*R_k_inverse_i(1,2) + (y_I(2)-hI_Ii(2))*R_k_inverse_i(2,2));
 
+     return true;
+   }
+};
 
 struct F1_m {
    template <typename T>
@@ -559,15 +588,21 @@ int main(int argc, char **argv)
   ros::Subscriber follower_force_sub = nh.subscribe<geometry_msgs::Point>("/follower_ukf/force", 1, follower_force_cb);
   ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 1, leader_force_cb);
   ros::Publisher plot_pub = nh.advertise<geometry_msgs::Point>("/plot", 1);
+
   initial();
   double qji_5_old, qji_0_old, qji_1_old, qji_2_old, qji_3_old, qji_4_old, qji_6_old, qji_7_old;
   double qji_5_initial, qji_0_initial, qji_1_initial, qji_2_initial, qji_3_initial, qji_4_initial, qji_6_initial, qji_7_initial;
+
+  double inertia_5_old, inertia_0_old, inertia_1_old, inertia_2_old, inertia_3_old, inertia_4_old;
+  double inertia_5_initial, inertia_0_initial, inertia_1_initial, inertia_2_initial, inertia_3_initial, inertia_4_initial;
+
 
   // The variable to solve for with its initial value.
   //initial qji
   double x1[] = {1.0, 0.2, 0.3, 0.2, 0.0, 3.0, 1.0, 1.0};
 
   double qji[] = {1.0, 0.0, 0.0, 0.0, 0.0, 3.0, 1.0, 1.0};
+  double inertia[] = {0.6, 0.5, 0.4, 0.3, 0.2, 0.1};
   double m = 0.1;
   double m_old, m_initial;
   int count_m = 0;
@@ -584,14 +619,16 @@ int main(int argc, char **argv)
     rate_r = 5;
     ros::Rate rate(rate_r);
     while(ros::ok()){
+
     checkmeasure();
     quaternionToRPY();
     if(flag ==1 && flag2 ==1){
     transformation_model();
     m_model();
+    inertia_model();
     Problem problem;
     Problem problem_m;
-
+    Problem problem_inertia;
     // ----------------------estimate mass---------------------------------
 
     problem_m.AddResidualBlock(new AutoDiffCostFunction<F1_m, 1, 1>(new F1_m),
@@ -709,7 +746,7 @@ int main(int argc, char **argv)
     //options.function_tolerance = 1e-9;
     //options.max_line_search_step_contraction = 1e-1;
     Solver::Summary summary;
-    Solve(options, &problem, &summary);
+    //Solve(options, &problem, &summary);
 
     std::cout << summary.BriefReport() << "\n";
     /*
@@ -718,12 +755,12 @@ int main(int argc, char **argv)
 */
     //qji_d_x_k = qji_d_x;
     //qji_k = qji;
-
+/*
     ROS_INFO("------------------------------------");
     ROS_INFO("tx = %f, ty = %f, tz = %f", qji[5], qji[6], qji[7]);
     ROS_INFO("qw = %f, qx = %f, qy = %f, qz = %f", qji[0],qji[1],qji[2],qji[3]);
     ROS_INFO("------------------------------------");
-
+*/
     plot_x.x = qji[5];
     plot_x.y = 1.6;
     plot_pub.publish(plot_x);
@@ -813,6 +850,122 @@ int main(int argc, char **argv)
     qji[6] = 1.0;
     qji[7] = 1.0;
     // ----------------------------------------------------------------------------------------------
+    // --------------------------estimate inertia---------------------------
+
+       // Set up the only cost function (also known as residual). This uses
+       // auto-differentiation to obtain the derivative (jacobian).
+
+       vector<int> inertia_const_v;
+       inertia_const_v.insert(inertia_const_v.end(), 0);
+       inertia_const_v.insert(inertia_const_v.end(), 1);
+       inertia_const_v.insert(inertia_const_v.end(), 2);
+       inertia_const_v.insert(inertia_const_v.end(), 3);
+       inertia_const_v.insert(inertia_const_v.end(), 4);
+       problem_inertia.AddResidualBlock(new AutoDiffCostFunction<F1_inertia, 1, 6>(new F1_inertia),
+                                  NULL,
+                                  inertia);
+       //ceres::SubsetParameterization *qji4_const = new ceres::SubsetParameterization(8, qji4_const_v);
+       //problem.SetParameterization(qji, qji4_const);
+       //problem.SetParameterUpperBound(inertia, i, up);
+       //problem.SetParameterLowerBound(qji, i, low);
+
+       //problem.SetParameterBlockConstant(qji);
+       /*
+       problem.AddResidualBlock(new AutoDiffCostFunction<F2_v, 1, 8>(new F2_v),
+                                  NULL,
+                                qji);
+   */
+       // Run the solver!
+
+       Solver::Options options_inertia;
+       /*
+       LOG_IF(FATAL, !ceres::StringToMinimizerType(FLAGS_minimizer,
+                                                   &options.minimizer_type))
+           << "Invalid minimizer: " << FLAGS_minimizer
+           << ", valid options are: trust_region and line_search.";
+           */
+       options_inertia.max_num_iterations = 100;
+       options_inertia.linear_solver_type = ceres::DENSE_QR;
+       options_inertia.minimizer_progress_to_stdout = true;
+       //options.use_nonmonotonic_steps = true;
+       //options.trust_region_strategy_type = ceres::DOGLEG;
+       //options.use_nonmonotonic_steps = true;
+       //options.function_tolerance = 1e-9;
+       //options.max_line_search_step_contraction = 1e-1;
+       Solver::Summary summary_inertia;
+       Solve(options_inertia, &problem_inertia, &summary_inertia);
+
+       std::cout << summary_inertia.BriefReport() << "\n";
+
+       ROS_INFO("Jzz = %f", inertia[0]);
+
+       inertia_k(0) = inertia[0];
+       inertia_k(1) = inertia[1];
+       inertia_k(2) = inertia[2];
+       inertia_k(3) = inertia[3];
+       inertia_k(4) = inertia[4];
+       inertia_k(5) = inertia[5];
+
+
+
+
+       if(inertia[0] < inertia_0_old){
+         inertia_0_initial = inertia[0] - 0.1;
+       }
+       else{
+         inertia_0_initial = inertia[0] + 0.1;
+       }
+
+       if(inertia[1] < inertia_1_old){
+         inertia_1_initial = inertia[1] - 0.1;
+       }
+       else{
+         inertia_1_initial = inertia[1] + 0.1;
+       }
+       if(inertia[2] < inertia_2_old){
+         inertia_2_initial = inertia[2] - 0.1;
+       }
+       else{
+         inertia_2_initial = inertia[2] + 0.1;
+       }
+
+       if(inertia[3] < inertia_3_old){
+         inertia_3_initial = inertia[3] - 0.1;
+       }
+       else{
+         inertia_3_initial = inertia[3] + 0.1;
+       }
+       if(inertia[4] < inertia_4_old){
+         inertia_4_initial = inertia[4] - 0.1;
+       }
+       else{
+         inertia_4_initial = inertia[4] + 0.1;
+       }
+
+       if(inertia[5] < inertia_5_old){
+         inertia_5_initial = inertia[5] - 0.1;
+       }
+       else{
+         qji_5_initial = qji[5] + 0.1;
+       }
+
+
+       inertia_0_old = inertia[0];
+       inertia_1_old = inertia[1];
+       inertia_2_old = inertia[2];
+       inertia_3_old = inertia[3];
+       inertia_4_old = inertia[4];
+       inertia_5_old = inertia[5];
+
+
+       inertia[0] = 0.6;
+       inertia[1] = 0.5;
+       inertia[2] = 0.4;
+       inertia[3] = 0.3;
+       inertia[4] = 0.2;
+       inertia[5] = 0.1;
+
+       // ----------------------------------------------------------------------------------------------
     }
     ros::spinOnce();
     rate.sleep();

@@ -332,8 +332,8 @@ uz = KPz*errz;
 uroll = KProll*err_roll;
 
 if(force_control){
-  ux = fx;
-  uy = fy;
+  ux = fx;// - FL_x
+  uy = fy;// - FL_y
 }
 
 if(velocity_leftward){
@@ -397,7 +397,7 @@ zz = (pcf_z - pg_z);
 
 fx = -zy;
 fy = zx;
-
+ROS_INFO("fx = %f, fy = %f", fx, fy);
 FF_x = lpFFx.filter(-follower_force.force.x);
 FF_y = lpFFy.filter(-follower_force.force.y);
 
@@ -425,8 +425,8 @@ uz = KPz*errz;
 uroll = KProll*err_roll;
 
 if(force_control){
-  ux = fx;
-  uy = fy;
+  ux = fx;//- FF_x
+  uy = fy;// - FF_y
 }
 
 if(velocity_zero){
@@ -714,6 +714,7 @@ int main(int argc, char **argv)
                 velocity_downward = false;
                 velocity_rightward = false;
                 velocity_leftward = false;
+                force_control = false;
                 break;
             case 52: // 4
                 velocity_backward = true;
@@ -756,8 +757,8 @@ int main(int argc, char **argv)
                 vir2.z = 0;
                 vir2.roll = 0;
                 landing = true;
-                velocity_circle = false;
-                //force_control = false;
+                //velocity_circle = false;
+                force_control = false;
                             break;
                 }
             case 108:    // close arming

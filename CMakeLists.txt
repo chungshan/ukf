@@ -128,8 +128,8 @@ include_directories(${CERES_INCLUDE_DIRS})
 # )
 #set(HEADERS_   src/lpf.h)
 #set(SOURCES_   src/lpf.cpp)
-set(HEADERS_   src/lpf2.h)
-set(SOURCES_   src/lpf2.cpp)
+set(HEADERS_   src/lpf2.h   src/forceest.h src/ukf.h)
+set(SOURCES_   src/lpf2.cpp     src/forceest.cpp src/ukf.cpp)
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -155,7 +155,8 @@ add_executable(estimate_payload_v2 src/estimate_payload_v2.cpp ${HEADERS_} ${SOU
 add_executable(light src/light.cpp)
 add_executable(leader_follower_force src/leader_follower_force.cpp ${HEADERS_} ${SOURCES_})
 add_executable(estimate_payload_v3 src/estimate_payload_v3.cpp)
-
+add_executable(control_rc src/control_rc.cpp)
+add_executable(force_estimate src/force_estimate.cpp ${HEADERS_} ${SOURCES_})
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -214,6 +215,12 @@ target_link_libraries(leader_follower_force
 )
 target_link_libraries(estimate_payload_v3
   ${catkin_LIBRARIES}
+)
+target_link_libraries(control_rc
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(force_estimate
+    ${catkin_LIBRARIES}
 )
 #############
 ## Install ##

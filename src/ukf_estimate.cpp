@@ -712,8 +712,8 @@ void correct(){
     double filter_;
     filter_ = lpf2.filter(state_[StateMemberFx]);
     force.x = filter_;
-    force.y = -state_[StateMemberFy];
-    force.z = -state_[StateMemberFz];
+    force.y = state_[StateMemberFy];
+    force.z = state_[StateMemberFz];
     //force.y = state_[StateMemberAz];
     //veloctiy body to inertial
     float roll, pitch , yaw;

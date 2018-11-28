@@ -8,8 +8,14 @@
 #include <tf/transform_datatypes.h>
 #include "lpf2.h"
 lpf2 lpaverage(0.01,0.02);
-
-geometry_msgs::Point follower_force;
+lpf2 lpf_leader_y(6, 0.02);
+lpf2 lpf_leader_z(6, 0.02);
+lpf2 lpf_follower_y(6, 0.02);
+lpf2 lpf_follower_z(6, 0.02);
+lpf2 lpf_alpha_x(2, 0.02);
+lpf2 lpf_alpha_y(2, 0.02);
+lpf2 lpf_alpha_z(2, 0.02);
+geometry_msgs::Point follower_force, pose;
 geometry_msgs::Point m, J, J_ref, p, p_ref, J_product, J_product_ref;
 void follower_force_cb(const geometry_msgs::Point::ConstPtr& msg){
   follower_force = *msg;
@@ -48,7 +54,10 @@ geometry_msgs::PoseStamped follower_mocap;
 void follower_mocap_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
   follower_mocap = *msg;
 }
-
+geometry_msgs::PoseStamped drone_follower_mocap;
+void drone_follower_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
+  drone_follower_mocap = *msg;
+}
 Eigen::VectorXd u_r_o;
 int rate_r;
 int flag2;
@@ -95,7 +104,8 @@ void quaternionToRPY(){
 
 
 }
-
+double residual;
+Eigen::MatrixXd sum_PE(10,10);
 void estimation_model(){
   Eigen::VectorXd u_l(6);
   Eigen::VectorXd u_f(6);
@@ -132,13 +142,15 @@ void estimation_model(){
   Eigen::VectorXd lambda(6);
   Eigen::VectorXd lambda_u(6);
   Eigen::VectorXd lambda_d(6);
+
+  Eigen::MatrixXd PE(10,10);
   double w_o_dot_x, w_o_dot_y, w_o_dot_z;
   double last_w_o_x, last_w_o_y, last_w_o_z;
   double dt;
   double alpha, beta;
   double phi_n;
   double p;
-
+  residual = 0;
   p = 1.2;
   alpha = 0.997395;
   beta = 0.99913;
@@ -161,15 +173,24 @@ void estimation_model(){
   u_l.setZero();
   u_f.setZero();
   u_l_f.setZero();
-  u_l << leader_force.x, leader_force.y, leader_force.z, 0, 0, 0;
-  u_f << 0, 0, 0, 0, 0, 0;
+
+  double leader_y, leader_z, follower_y, follower_z;
+
+  leader_y = lpf_leader_y.filter(leader_force.y);
+  leader_z = lpf_leader_z.filter(leader_force.z);
+  follower_y = lpf_follower_y.filter(follower_force.y);
+  follower_z = lpf_follower_z.filter(follower_force.z);
+
+  u_l << -leader_force.x, leader_y, leader_z, 0, 0, 0;
+  u_f << -follower_force.x, follower_y, follower_z, 0, 0, 0;
   u_l_f << u_f, u_l;
 
 
 
-  G_r_h_T << 1, 0, 0, 0, (leader_mocap.pose.position.z - follower_mocap.pose.position.z), -(leader_mocap.pose.position.y - follower_mocap.pose.position.y),
-             0, 1, 0, -(leader_mocap.pose.position.z - follower_mocap.pose.position.z), 0, (leader_mocap.pose.position.x - follower_mocap.pose.position.x),
-             0, 0, 1, (leader_mocap.pose.position.y - follower_mocap.pose.position.y), -(leader_mocap.pose.position.x - follower_mocap.pose.position.x), 0,
+
+  G_r_h_T << 1, 0, 0, 0, (follower_mocap.pose.position.z - leader_mocap.pose.position.z), -(follower_mocap.pose.position.y - leader_mocap.pose.position.y),
+             0, 1, 0, -(follower_mocap.pose.position.z - leader_mocap.pose.position.z), 0, (follower_mocap.pose.position.x - leader_mocap.pose.position.x),
+             0, 0, 1, (follower_mocap.pose.position.y - leader_mocap.pose.position.y), -(follower_mocap.pose.position.x - leader_mocap.pose.position.x), 0,
              0, 0, 0, 1, 0, 0,
              0, 0, 0, 0, 1, 0,
              0, 0, 0, 0, 0, 1;
@@ -239,14 +260,17 @@ void estimation_model(){
   v_f_dot_body(2) = (follower_imu.linear_acceleration.z - a_g_body(2));
   v_f_dot = (Rz*Rx*Ry).inverse()*v_f_dot_body;
   g << 0, 0, -9.8;
-
+  //follower_imu.angular_velocity.x = 0;
   g_r = Ry*Rx*Rz*g;
-  w_o_dot_x = (follower_imu.angular_velocity.x - last_w_o_x) * rate_r;
-  w_o_dot_y = (follower_imu.angular_velocity.y - last_w_o_y) * rate_r;
-  w_o_dot_z = (follower_imu.angular_velocity.z - last_w_o_z) * rate_r;
+  w_o_dot_x = lpf_alpha_x.filter((follower_imu.angular_velocity.x - last_w_o_x) * rate_r);
+  w_o_dot_y = lpf_alpha_y.filter((follower_imu.angular_velocity.y - last_w_o_y) * rate_r);
+  w_o_dot_z = lpf_alpha_z.filter((follower_imu.angular_velocity.z - last_w_o_z) * rate_r);
+
   last_w_o_x = follower_imu.angular_velocity.x;
   last_w_o_y = follower_imu.angular_velocity.y;
   last_w_o_z = follower_imu.angular_velocity.z;
+
+
 
   w_o_dot_skew << 0, -w_o_dot_z, w_o_dot_y,
                   w_o_dot_z, 0, -w_o_dot_x,
@@ -275,6 +299,14 @@ void estimation_model(){
          0, 0, -(g_r(2) - v_f_dot(2)), (g_r(1) - v_f_dot(1)), two_term(0,0), two_term(0,1), two_term(0,2), two_term(0,3), two_term(0,4), two_term(0,5),
          0, (g_r(2) - v_f_dot(2)), 0, -(g_r(0) - v_f_dot(0)), two_term(1,0), two_term(1,1), two_term(1,2), two_term(1,3), two_term(1,4), two_term(1,5),
          0, -(g_r(1) - v_f_dot(1)), (g_r(0) - v_f_dot(0)), 0, two_term(2,0), two_term(2,1), two_term(2,2), two_term(2,3), two_term(2,4), two_term(2,5);
+/*
+  PE = phi.transpose()*phi;
+  sum_PE = sum_PE + PE;
+
+  std::cout << "---PE---" << std::endl;
+  std::cout << sum_PE << std::endl;
+*/
+
   /*
   phi_square = phi.transpose()*phi;
   phi_sum += phi_square;
@@ -345,14 +377,25 @@ void estimation_model(){
   }
   */
   //delta += 3.267*1e-5;
-
+/*
   std::cout << fabs(e(0)) << std::endl;
   std::cout << "---" << std::endl;
   phi_n = p*pow(fabs(e(0)), 0.2)/((1 + pow(fabs(e(0)), 1.2)) * fabs(e(0)));
   std::cout << phi_n << std::endl;
-  K = phi_n*P*phi.transpose()*(delta*R+phi_n*phi*P*phi.transpose()).inverse();
+  residual = e.dot(e);
+*/
+  //K = phi_n*P*phi.transpose()*(delta*R+phi_n*phi*P*phi.transpose()).inverse();
+  K = P*phi.transpose()*(delta*R+phi*P*phi.transpose()).inverse();
+/*
+  std::cout << "-----K------" << std::endl;
+  std::cout << K << std::endl;
+  std::cout << "-------residual-------" << std::endl;
 
+  std::cout << (u_r_o_hat - u_r_o) << std::endl;
+  std::cout << "----------------" << std::endl;
+*/
   P = (1/delta)*(I10 - K*phi)*P;
+
 
 
   theta_hat = theta_hat - K*(u_r_o_hat - u_r_o);
@@ -390,8 +433,9 @@ int main(int argc, char **argv)
   ros::Subscriber leader_imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone3_imu/mavros/imu/data", 1, leader_imu_cb);
   ros::Subscriber follower_imu_sub = nh.subscribe<sensor_msgs::Imu>("/imu1/mavros/imu/data", 1, follower_imu_cb);
   ros::Subscriber imu1_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 1, imu1_mocap_cb);
-  ros::Subscriber leader_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody3/pose", 1, leader_mocap_cb);
-  ros::Subscriber follower_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 1, follower_mocap_cb);
+  ros::Subscriber leader_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody4/pose", 1, leader_mocap_cb);
+  ros::Subscriber follower_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 1, follower_mocap_cb);
+  ros::Subscriber drone_follower_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 1, drone_follower_cb);
   ros::Publisher m_pub = nh.advertise<geometry_msgs::Point>("/m", 2);
   ros::Publisher J_pub = nh.advertise<geometry_msgs::Point>("/J", 2);
   ros::Publisher J_ref_pub = nh.advertise<geometry_msgs::Point>("/J_ref", 2);
@@ -400,6 +444,7 @@ int main(int argc, char **argv)
   ros::Publisher p_pub = nh.advertise<geometry_msgs::Point>("/p", 2);
   ros::Publisher p_ref_pub = nh.advertise<geometry_msgs::Point>("/p_ref", 2);
   ros::Publisher follower_imu_angular_v_pub = nh.advertise<geometry_msgs::Point>("/follower_angular_v", 2);
+  ros::Publisher pose_pub = nh.advertise<geometry_msgs::Point>("/pose", 2);
   rate_r = 50;
   ros::Rate rate(rate_r);
   theta_hat << 1, 1, 1, 1, 1, 1, 1, 1, 1, 1;
@@ -413,9 +458,9 @@ int main(int argc, char **argv)
        0, 0, 0, 0, 0, 0, 0, 1.0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 1.0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 1.0;
-  R << 0.1, 0, 0, 0, 0, 0,
-       0, 0.1, 0, 0, 0, 0,
-       0, 0, 0.1, 0, 0, 0,
+  R << 1, 0, 0, 0, 0, 0,
+       0, 1, 0, 0, 0, 0,
+       0, 0, 1, 0, 0, 0,
        0, 0, 0, 1, 0, 0,
        0, 0, 0, 0, 1, 0,
        0, 0, 0, 0, 0, 1;
@@ -423,8 +468,10 @@ int main(int argc, char **argv)
   first_time = ros::Time::now().toSec();
   sigma_v2.setZero();
   int average_flag;
-  double average;
-  double sum;
+  double average, average_m, average_Jyy, average_Jxx;
+
+  double sum, sum_m, sum_Jyy, sum_Jxx;
+
   double running_time;
   int count = 1;
   while(ros::ok()){
@@ -434,9 +481,10 @@ int main(int argc, char **argv)
     estimation_model();
     m.x = theta_hat(0);
     m.y = 0.3;
-    J.x = theta_hat(4);
-    J.y = theta_hat(7);
-    J.z = theta_hat(9);
+    m.z = average_m;
+    J.x = average_Jyy;//theta_hat(4)
+    J.y = theta_hat(7);//theta_hat(7)
+    J.z = theta_hat(9);//theta_hat(9)
     J_product.x = theta_hat(5);
     J_product.y = theta_hat(6);
     J_product.z = theta_hat(8);
@@ -444,15 +492,17 @@ int main(int argc, char **argv)
     J_product_ref.y = 0;
     J_product_ref.z = 0;
     J_ref.x = 2.2*1e-5;
-    J_ref.y = 0.256;
-    J_ref.z = 0.256;//0.256
-    p.x = theta_hat(1)/theta_hat(0);
-    p.y = theta_hat(2)/theta_hat(0);
-    p.z = theta_hat(3)/theta_hat(0);
-    p_ref.x = 0.8;
+    J_ref.y = 0.192;
+    J_ref.z = 0.192;//0.256
+
+    p_ref.x = 0.75;
     p_ref.y = 0.0;
     p_ref.z = 0.0;
 
+    //pose.x = follower_force.z;
+    //pose.y = leader_mocap.pose.position.z;
+    //pose.z = leader_mocap.pose.position.z;
+    pose_pub.publish(pose);
     m_pub.publish(m);
     J_pub.publish(J);
     J_ref_pub.publish(J_ref);
@@ -464,18 +514,33 @@ int main(int argc, char **argv)
     running_time = ros::Time::now().toSec() - first_time;
     if(running_time > 5){
       average_flag = 1;
-      //delta = 0.99;
+
+    }
+    if(running_time > 15){
+
+      delta = 0.97;
+
     }
     if(average_flag == 1){
     sum = sum + theta_hat(9);
+    sum_m = sum_m + theta_hat(0);
+    sum_Jyy = sum_Jyy + theta_hat(7);
+    sum_Jxx = sum_Jxx + theta_hat(4);
     average = sum/count;
+    average_m = sum_m/count;
+    average_Jyy = sum_Jyy/count;
+    average_Jxx = sum_Jxx/count;
+    p.x = -theta_hat(1)/average_m;
+    p.y = 0.5*(leader_mocap.pose.position.x - follower_mocap.pose.position.x);//theta_hat(2)/average_m
+    p.z = -leader_force.x;;//theta_hat(3)/average_m
     count+=1;
     }
     filtertt = lpaverage.filter(theta_hat(9));
     ROS_INFO("m = %f", theta_hat(0));
-    ROS_INFO("tx = %f, ty = %f, tz = %f", theta_hat(1)/theta_hat(0),theta_hat(2)/theta_hat(0),theta_hat(3)/theta_hat(0));
+    ROS_INFO("tx = %f, ty = %f, tz = %f", p.x,p.y,p.z);
     ROS_INFO("J_xx = %f, J_yy = %f, J_zz = %f", theta_hat(4), theta_hat(7), theta_hat(9));
-    ROS_INFO("average = %f", average);
+    ROS_INFO("average_Jzz = %f, average_Jyy = %f, average_m = %f", average, average_Jyy, average_m);
+
 }
 
 
