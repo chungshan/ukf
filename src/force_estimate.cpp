@@ -157,17 +157,24 @@ int main(int argc, char **argv)
     }
 
 if(drone_flag=3){
+  double b;
     F1 = (5.6590*1e-4*(pwm3*pwm3) - 0.5995*pwm3 - 77.5178)*9.8/1000; // drone3
     F2 = (5.6590*1e-4*(pwm1*pwm1) - 0.5995*pwm1 - 77.5178)*9.8/1000;
     F3 = (5.6590*1e-4*(pwm4*pwm4) - 0.5995*pwm4 - 77.5178)*9.8/1000;
     F4 = (5.6590*1e-4*(pwm2*pwm2) - 0.5995*pwm2 - 77.5178)*9.8/1000;
-
+  b = -(3.065625*1000/9.8-5.6590*1e-4*(pwm1*pwm1)+0.5995*pwm1);//no payload
+  std::cout << "---b---" << std::endl;
+  std::cout << b << std::endl;
 }
 if(drone_flag=2){
+  double a;
     F1 = (8.1733*1e-4*(pwm3*pwm3) - 1.2950*pwm3 + 305.7775)*9.8/1000; //drone2
     F2 = (8.1733*1e-4*(pwm1*pwm1) - 1.2950*pwm1 + 305.7775)*9.8/1000;
     F3 = (8.1733*1e-4*(pwm4*pwm4) - 1.2950*pwm4 + 305.7775)*9.8/1000;
     F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 305.7775)*9.8/1000;
+    a = 3.065625*1000/9.8-8.1733*1e-4*(pwm1*pwm1)+1.2950*pwm1;//no payload
+    std::cout << "---a---" << std::endl;
+    std::cout << a << std::endl;
 }
     forceest1.thrust = F1 + F2 + F3 + F4;
     std::cout << "----------thrust-------" << std::endl;
