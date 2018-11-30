@@ -1,0 +1,11 @@
+<launch>
+<group ns = "leader_ukf">
+   <node pkg="UKF" name="ukf" type="force_estimate" output="screen" >
+     <param name="topic_imu" value="/drone3/mavros/imu/data" />
+     <param name="topic_mocap" value="/vrpn_client_node/RigidBody3/pose" />
+     <param name="topic_thrust" value="/drone3/mavros/rc/out" />
+     <param name="topic_vel" value="/drone3/mavros/local_position/velocity" />
+     <param name="topic_drone" value="3" />
+   </node>
+</group>
+</launch>

@@ -39,10 +39,18 @@ ukf::ukf(int state_size , int measurement_size){
 
   w_c(0) = (lambda / (L+lambda))+(1-alpha*alpha+beta);
   w_m(0) = (lambda)/(L+lambda);
-
+ /*
+  w_c(0) = 0;
+  w_m(0) = 0;
+  */
   for(int i=1 ; i<x_sigmavector_size ; i++){
+
     w_c(i) = 1/(2*(L+lambda));
     w_m(i) = 1/(2*(L+lambda));
+    /*
+    w_c(i) = 1/(2*L);
+    w_m(i) = 1/(2*L);
+    */
   }
 
   // default Q R P matrix
@@ -100,6 +108,7 @@ void ukf::predict(){
   x_hat.setZero(x_size);   //initialize x_hat
   for(int i=0;i<x_sigmavector_size;i++){
     x_hat += w_m(i)* x_sigmavector.col(i);
+
     Eigen::VectorXd sigmavector_;
     sigmavector_ = x_sigmavector.col(i);
 
@@ -225,9 +234,11 @@ void ukf::correct(Eigen::VectorXd measure){
 
 
     last_quat = q_k1;
+    /*
     std::cout << "-----------------------------------------------------------------------" << std::endl;
     std::cout << "----quaternion----" << std::endl;
     std::cout << q_k1 << std::endl;
+    */
     tf::Quaternion quat_transform(q_k1(0),q_k1(1),q_k1(2),q_k1(3));
     double roll,pitch,yaw;
     tf::Matrix3x3(quat_transform).getRPY(roll,pitch,yaw);

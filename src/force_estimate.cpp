@@ -12,10 +12,10 @@
 #include "geometry_msgs/TwistStamped.h"
 #include "geometry_msgs/Point.h"
 #include "mavros_msgs/RCOut.h"
-
+#include <string>
 #define l 0.25
 #define k 0.02
-
+int drone_flag;
 forceest forceest1(statesize,measurementsize);
 geometry_msgs::Point euler, euler_ref, force;
 sensor_msgs::Imu drone2_imu;
@@ -41,13 +41,22 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "force_estimate");
   ros::NodeHandle nh;
-  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone2/mavros/imu/data", 2, imu_cb);
-  ros::Subscriber pos_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 2, pose_cb);
-  ros::Subscriber vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("/drone2/mavros/local_position/velocity", 2, vel_cb);
-  ros::Subscriber rc_sub = nh.subscribe<mavros_msgs::RCOut>("/drone2/mavros/rc/out", 2, rc_cb);
-  ros::Publisher euler_pub = nh.advertise<geometry_msgs::Point>("/euler", 2);
-  ros::Publisher euler_ref_pub = nh.advertise<geometry_msgs::Point>("/euler_ref", 2);
-  ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("/force", 2);
+
+  std::string topic_imu, topic_mocap, topic_thrust, topic_vel;
+  ros::param::get("~topic_imu", topic_imu);
+  ros::param::get("~topic_mocap", topic_mocap);
+  ros::param::get("~topic_thrust", topic_thrust);
+  ros::param::get("~topic_vel", topic_vel);
+  ros::param::get("~topic_vel", topic_vel);
+  ros::param::get("~topic_drone", drone_flag);
+
+  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
+  ros::Subscriber pos_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, pose_cb);
+  ros::Subscriber vel_sub = nh.subscribe<geometry_msgs::TwistStamped>(topic_vel, 2, vel_cb);
+  ros::Subscriber rc_sub = nh.subscribe<mavros_msgs::RCOut>(topic_thrust, 2, rc_cb);
+  ros::Publisher euler_pub = nh.advertise<geometry_msgs::Point>("euler", 2);
+  ros::Publisher euler_ref_pub = nh.advertise<geometry_msgs::Point>("euler_ref", 2);
+  ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("force_estimate", 2);
   ros::Rate loop_rate(30);
 
 
@@ -146,19 +155,22 @@ int main(int argc, char **argv)
     pwm4 = rc_out.channels[3];
 
     }
-/*
+
+if(drone_flag=3){
     F1 = (5.6590*1e-4*(pwm3*pwm3) - 0.5995*pwm3 - 77.5178)*9.8/1000; // drone3
     F2 = (5.6590*1e-4*(pwm1*pwm1) - 0.5995*pwm1 - 77.5178)*9.8/1000;
     F3 = (5.6590*1e-4*(pwm4*pwm4) - 0.5995*pwm4 - 77.5178)*9.8/1000;
     F4 = (5.6590*1e-4*(pwm2*pwm2) - 0.5995*pwm2 - 77.5178)*9.8/1000;
-*/
 
+}
+if(drone_flag=2){
     F1 = (8.1733*1e-4*(pwm3*pwm3) - 1.2950*pwm3 + 305.7775)*9.8/1000; //drone2
     F2 = (8.1733*1e-4*(pwm1*pwm1) - 1.2950*pwm1 + 305.7775)*9.8/1000;
     F3 = (8.1733*1e-4*(pwm4*pwm4) - 1.2950*pwm4 + 305.7775)*9.8/1000;
     F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 305.7775)*9.8/1000;
-
+}
     forceest1.thrust = F1 + F2 + F3 + F4;
+    std::cout << "----------thrust-------" << std::endl;
     std::cout << forceest1.thrust << std::endl;
     U_x = (sqrt(2)/2)*l*(F1 - F2 - F3 + F4);
     U_y = (sqrt(2)/2)*l*(-F1 - F2 + F3 + F4);

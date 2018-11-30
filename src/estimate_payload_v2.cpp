@@ -181,8 +181,8 @@ void estimation_model(){
   follower_y = lpf_follower_y.filter(follower_force.y);
   follower_z = lpf_follower_z.filter(follower_force.z);
 
-  u_l << -leader_force.x, leader_y, leader_z, 0, 0, 0;
-  u_f << -follower_force.x, follower_y, follower_z, 0, 0, 0;
+  u_l << -leader_force.x, -leader_y, -leader_z, 0, 0, 0;
+  u_f << -follower_force.x, -follower_y, -follower_z, 0, 0, 0;
   u_l_f << u_f, u_l;
 
 
@@ -428,8 +428,8 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "estimate_payload_v2");
   ros::NodeHandle nh;
-  ros::Subscriber follower_force_sub = nh.subscribe<geometry_msgs::Point>("/follower_ukf/force", 1, follower_force_cb);
-  ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_ukf/force", 1, leader_force_cb);
+  ros::Subscriber follower_force_sub = nh.subscribe<geometry_msgs::Point>("/follower_ukf/force_estimate", 1, follower_force_cb);
+  ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_ukf/force_estimate", 1, leader_force_cb);
   ros::Subscriber leader_imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone3_imu/mavros/imu/data", 1, leader_imu_cb);
   ros::Subscriber follower_imu_sub = nh.subscribe<sensor_msgs::Imu>("/imu1/mavros/imu/data", 1, follower_imu_cb);
   ros::Subscriber imu1_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 1, imu1_mocap_cb);
