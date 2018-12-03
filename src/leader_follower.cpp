@@ -114,6 +114,11 @@ void follower_force_cb(const UKF::output::ConstPtr& msg){
   follower_force = *msg;
 }
 
+geometry_msgs::Point follower_force_estimate;
+void follower_force_estimate_cb(const geometry_msgs::Point::ConstPtr& msg){
+  follower_force_estimate = *msg;
+}
+
 mavros_msgs::State current_state, current_state2;
 void state_cb(const mavros_msgs::State::ConstPtr& msg) {
     current_state = *msg;
@@ -360,9 +365,9 @@ err_roll = err_roll - 2*pi;
 else if(err_roll<-pi)
 err_roll = err_roll + 2*pi;
 FL_x = leader_force.x;
-FF_x = -follower_force.force.x;
+FF_x = -follower_force_estimate.x;
 FL_y = leader_force.y;
-FF_y = -follower_force.force.y;
+FF_y = -follower_force_estimate.y;
 
 FLx_filt = lpFLx.filter(FL_x);
 FFx_filt = lpFFx.filter(FF_x);
@@ -406,8 +411,8 @@ if((controller_state == negative_engaged) && FLx_filt > -1){
 }
 //trigger.y = FLx_filt;
 trigger.z = FLx_filt;
-ROS_INFO("FL_x = %f", FLx_filt);
 ROS_INFO("FF_x = %f", FFx_filt);
+ROS_INFO("FF_y = %f", FFy_filt);
 
 err_diffx = errx - last_errx;
 err_diffy = erry - last_erry;
@@ -626,6 +631,7 @@ int main(int argc, char **argv)
 
     ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 2, leader_force_cb);
     ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 1, follower_force_cb);
+    ros::Subscriber follower_force_estimate_sub = nh.subscribe<geometry_msgs::Point>("/follower_ukf/force_estimate", 1, follower_force_estimate_cb);
     ros::Subscriber connector_vel_sub = nh.subscribe<geometry_msgs::Point>("/connector/velocity", 1, connector_vel_cb);
     ros::Publisher force_error_pub = nh.advertise<geometry_msgs::Point>("/force_error", 1);
     ros::Publisher pos_error_pub = nh.advertise<geometry_msgs::Point>("/pos_error", 1);

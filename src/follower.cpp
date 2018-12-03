@@ -207,8 +207,8 @@ int main(int argc, char **argv)
     vs.twist.angular.z = 0;
 
   vir2.x = -0.8;
-  vir2.y = -0.5;
-  vir2.z = 0.7;
+  vir2.y = 0.0;
+  vir2.z = 0.9;
   vir2.roll = 0;
 
     //send a few setpoints before starting
@@ -297,7 +297,7 @@ int main(int argc, char **argv)
             case 102:    // stop, key F
               {
                 //vir2.x = -0.6;
-                vir2.y = -0.5;
+                //vir2.y = -0.5;
                 vir2.z = 0;
                 vir2.roll = 0;
                 break;
@@ -324,7 +324,7 @@ int main(int argc, char **argv)
           vir2.roll = vir2.roll + 2*pi;
 
           ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir2.x, vir2.y, vir2.z, vir2.roll/pi*180);
-          follow(vir2,host_mocap,&vs,0,-0.5);
+          follow(vir2,host_mocap,&vs,0,0.0);
           //mocap_pos_pub.publish(host_mocap);
           local_vel_pub.publish(vs);
 

@@ -17,7 +17,7 @@
 #define k 0.02
 int drone_flag;
 forceest forceest1(statesize,measurementsize);
-geometry_msgs::Point euler, euler_ref, force;
+geometry_msgs::Point euler, euler_ref, force, torque;
 sensor_msgs::Imu drone2_imu;
 void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
   drone2_imu = *msg;
@@ -57,6 +57,7 @@ int main(int argc, char **argv)
   ros::Publisher euler_pub = nh.advertise<geometry_msgs::Point>("euler", 2);
   ros::Publisher euler_ref_pub = nh.advertise<geometry_msgs::Point>("euler_ref", 2);
   ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("force_estimate", 2);
+  ros::Publisher torque_pub = nh.advertise<geometry_msgs::Point>("torque", 2);
   ros::Rate loop_rate(30);
 
 
@@ -156,7 +157,7 @@ int main(int argc, char **argv)
 
     }
 
-if(drone_flag=3){
+if(drone_flag==3){
   double b;
     F1 = (5.6590*1e-4*(pwm3*pwm3) - 0.5995*pwm3 - 77.5178)*9.8/1000; // drone3
     F2 = (5.6590*1e-4*(pwm1*pwm1) - 0.5995*pwm1 - 77.5178)*9.8/1000;
@@ -166,12 +167,12 @@ if(drone_flag=3){
   std::cout << "---b---" << std::endl;
   std::cout << b << std::endl;
 }
-if(drone_flag=2){
+if(drone_flag==2){
   double a;
-    F1 = (8.1733*1e-4*(pwm3*pwm3) - 1.2950*pwm3 + 305.7775)*9.8/1000; //drone2
-    F2 = (8.1733*1e-4*(pwm1*pwm1) - 1.2950*pwm1 + 305.7775)*9.8/1000;
-    F3 = (8.1733*1e-4*(pwm4*pwm4) - 1.2950*pwm4 + 305.7775)*9.8/1000;
-    F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 305.7775)*9.8/1000;
+    F1 = (8.1733*1e-4*(pwm3*pwm3) - 1.2950*pwm3 + 355.7775)*9.8/1000; //drone2
+    F2 = (8.1733*1e-4*(pwm1*pwm1) - 1.2950*pwm1 + 355.7775)*9.8/1000;
+    F3 = (8.1733*1e-4*(pwm4*pwm4) - 1.2950*pwm4 + 355.7775)*9.8/1000;
+    F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 355.7775)*9.8/1000;
     a = 3.065625*1000/9.8-8.1733*1e-4*(pwm1*pwm1)+1.2950*pwm1;//no payload
     std::cout << "---a---" << std::endl;
     std::cout << a << std::endl;
@@ -253,6 +254,8 @@ if(drone_flag=2){
     force.y = forceest1.x[F_y];
     force.z = forceest1.x[F_z];
 
+    torque.z = forceest1.x[tau_z];
+    torque_pub.publish(torque);
     force_pub.publish(force);
 
     //ROS_INFO("q_x = %f", forceest1.x[v_x]);
