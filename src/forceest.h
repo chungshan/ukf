@@ -15,13 +15,16 @@ enum state{
   e_x,
   e_y,
   e_z,
-  omega_x,
-  omega_y,
-  omega_z,
+  //omega_x,
+  //omega_y,
+  //omega_z,
   F_x,
   F_y,
   F_z,
   tau_z,
+  beta_x,
+  beta_y,
+  beta_z,
   statesize
 };
 
@@ -35,9 +38,9 @@ enum measurement{
   me_x,
   me_y,
   me_z,
-  momega_x,
-  momega_y,
-  momega_z,
+  //momega_x,
+  //momega_y,
+  //momega_z,
   measurementsize
 };
 

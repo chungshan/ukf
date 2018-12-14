@@ -51,6 +51,8 @@ public:
     Eigen::Vector4d quat_m;
     Eigen::Vector4d qk11;
     Eigen::Vector3d euler_angle;
+    Eigen::Vector4d quaternion;
+    Eigen::Vector3d angular_v_measure;
 private:
 
     Eigen::VectorXd w_c ; //weight c

@@ -15,8 +15,10 @@ lpf2 lpf_follower_z(6, 0.02);
 lpf2 lpf_alpha_x(2, 0.02);
 lpf2 lpf_alpha_y(2, 0.02);
 lpf2 lpf_alpha_z(2, 0.02);
+int count1 =1;
+double Jyy_T_sum;
 geometry_msgs::Point follower_force, pose;
-geometry_msgs::Point m, J, J_ref, p, p_ref, J_product, J_product_ref;
+geometry_msgs::Point m, J, J_ref, p, p_ref, J_product, J_product_ref, u_r_o_measure, J_average, alpha_m;
 void follower_force_cb(const geometry_msgs::Point::ConstPtr& msg){
   follower_force = *msg;
 }
@@ -38,7 +40,7 @@ void follower_imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
   follower_imu = *msg;
   follower_imu_angular_v.x = follower_imu.angular_velocity.x;
   follower_imu_angular_v.y = follower_imu.angular_velocity.y;
-  follower_imu_angular_v.z = follower_imu.angular_velocity.z;
+  follower_imu_angular_v.z =        follower_imu.angular_velocity.z;
 }
 
 geometry_msgs::PoseStamped imu1_mocap;
@@ -150,6 +152,9 @@ void estimation_model(){
   double alpha, beta;
   double phi_n;
   double p;
+  double Jyy_test;
+  double Jyy_av;
+  Eigen::Vector3d pf,pl;
   residual = 0;
   p = 1.2;
   alpha = 0.997395;
@@ -181,13 +186,14 @@ void estimation_model(){
   follower_y = lpf_follower_y.filter(follower_force.y);
   follower_z = lpf_follower_z.filter(follower_force.z);
 
-  u_l << -leader_force.x, -leader_y, -leader_z, 0, 0, 0;
-  u_f << -follower_force.x, -follower_y, -follower_z, 0, 0, 0;
+  u_l << -leader_force.x, -leader_force.y, -leader_force.z, 0, 0, 0;
+  u_f << -follower_force.x, -follower_force.y, -follower_force.z, 0, 0, 0;
   u_l_f << u_f, u_l;
 
 
 
 
+/*
   G_r_h_T << 1, 0, 0, 0, (follower_mocap.pose.position.z - leader_mocap.pose.position.z), -(follower_mocap.pose.position.y - leader_mocap.pose.position.y),
              0, 1, 0, -(follower_mocap.pose.position.z - leader_mocap.pose.position.z), 0, (follower_mocap.pose.position.x - leader_mocap.pose.position.x),
              0, 0, 1, (follower_mocap.pose.position.y - leader_mocap.pose.position.y), -(follower_mocap.pose.position.x - leader_mocap.pose.position.x), 0,
@@ -203,8 +209,22 @@ void estimation_model(){
        0, 0, 0, 1, 0, 0, G_r_h(3,0), G_r_h(3,1), G_r_h(3,2), G_r_h(3,3), G_r_h(3,4), G_r_h(3,5),
        0, 0, 0, 0, 1, 0, G_r_h(4,0), G_r_h(4,1), G_r_h(4,2), G_r_h(4,3), G_r_h(4,4), G_r_h(4,5),
        0, 0, 0, 0, 0, 1, G_r_h(5,0), G_r_h(5,1), G_r_h(5,2), G_r_h(5,3), G_r_h(5,4), G_r_h(5,5);
+*/
 
+  pf << follower_mocap.pose.position.x - 0.5*(follower_mocap.pose.position.x+leader_mocap.pose.position.x), follower_mocap.pose.position.y - 0.5*(follower_mocap.pose.position.y+leader_mocap.pose.position.y), follower_mocap.pose.position.z - 0.5*(follower_mocap.pose.position.z+leader_mocap.pose.position.z);
+  pl << leader_mocap.pose.position.x - 0.5*(follower_mocap.pose.position.x+leader_mocap.pose.position.x), leader_mocap.pose.position.y - 0.5*(follower_mocap.pose.position.y+leader_mocap.pose.position.y), leader_mocap.pose.position.z - 0.5*(follower_mocap.pose.position.z+leader_mocap.pose.position.z);
+
+  H << 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+       0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+       0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+       0, -pf(2), pf(1),0, 0, 0,0, -pl(2), pl(1),0, 0, 0,
+       pf(2), 0, -pf(0), 0, 0, 0, pl(2), 0, -pl(0), 0, 0, 0,
+      -pf(1), pf(0), 0, 0, 0, 0,-pl(1), pl(0), 0, 0, 0, 0;
   u_r_o = H * u_l_f;
+
+
+
+
   //remove gravity in acceleration
   double roll, pitch , yaw;
   //const float imu_ax_bias = -0.077781;
@@ -258,18 +278,36 @@ void estimation_model(){
   v_f_dot_body(0) = (follower_imu.linear_acceleration.x - a_g_body(0));
   v_f_dot_body(1) = (follower_imu.linear_acceleration.y + a_g_body(1));
   v_f_dot_body(2) = (follower_imu.linear_acceleration.z - a_g_body(2));
-  v_f_dot = (Rz*Rx*Ry).inverse()*v_f_dot_body;
+  v_f_dot = 0*(Rz*Rx*Ry).inverse()*v_f_dot_body;
   g << 0, 0, -9.8;
   //follower_imu.angular_velocity.x = 0;
   g_r = Ry*Rx*Rz*g;
+
   w_o_dot_x = lpf_alpha_x.filter((follower_imu.angular_velocity.x - last_w_o_x) * rate_r);
   w_o_dot_y = lpf_alpha_y.filter((follower_imu.angular_velocity.y - last_w_o_y) * rate_r);
   w_o_dot_z = lpf_alpha_z.filter((follower_imu.angular_velocity.z - last_w_o_z) * rate_r);
+  alpha_m.x = w_o_dot_x;
+  alpha_m.y = w_o_dot_y;
+  alpha_m.z = w_o_dot_z;
 
+/*
+  w_o_dot_x = (follower_imu.angular_velocity.x - last_w_o_x) * rate_r;
+  w_o_dot_y = (follower_imu.angular_velocity.y - last_w_o_y) * rate_r;
+  w_o_dot_z = (follower_imu.angular_velocity.z - last_w_o_z) * rate_r;
+*/
   last_w_o_x = follower_imu.angular_velocity.x;
   last_w_o_y = follower_imu.angular_velocity.y;
   last_w_o_z = follower_imu.angular_velocity.z;
+/*
+  Jyy_test = (u_r_o(4) - 0.3*0.8*(9.81))/w_o_dot_y;
+  Jyy_T_sum = Jyy_T_sum+Jyy_test;
+  Jyy_av = Jyy_T_sum/count1;
+  u_r_o_measure.x = 0.192*w_o_dot_y+0.3*0.8*9.81;
 
+  u_r_o_measure.y = u_r_o(4);
+  u_r_o_measure.z = w_o_dot_y;
+  count1 +=1;
+*/
 
 
   w_o_dot_skew << 0, -w_o_dot_z, w_o_dot_y,
@@ -292,13 +330,23 @@ void estimation_model(){
   //g_v_skew << 0, -(g_r(2) - v_f_dot(2)), (g_r(1) - v_f_dot(1)),(g_r(2) - v_f_dot(2));
   //g_r(2) - v_f_dot(2)
   //v_f_dot(2) - g_r(2)
-  two_term = dot_w_dot + w_o_skew*dot_w;
+  two_term = dot_w_dot + 0*w_o_skew*dot_w;
+  /*
   phi << v_f_dot(0) - g_r(0), w_o_dot_skew(0,0) + w_o_skew_double(0,0), w_o_dot_skew(0,1) + w_o_skew_double(0,1), w_o_dot_skew(0,2) + w_o_skew_double(0,2), 0, 0, 0, 0, 0, 0,
          v_f_dot(1) - g_r(1), w_o_dot_skew(1,0) + w_o_skew_double(1,0), w_o_dot_skew(1,1) + w_o_skew_double(1,1), w_o_dot_skew(1,2) + w_o_skew_double(1,2), 0, 0, 0, 0, 0, 0,
          v_f_dot(2) - g_r(2), w_o_dot_skew(2,0) + w_o_skew_double(2,0), w_o_dot_skew(2,1) + w_o_skew_double(2,1), w_o_dot_skew(2,2) + w_o_skew_double(2,2), 0, 0, 0, 0, 0, 0,
          0, 0, -(g_r(2) - v_f_dot(2)), (g_r(1) - v_f_dot(1)), two_term(0,0), two_term(0,1), two_term(0,2), two_term(0,3), two_term(0,4), two_term(0,5),
          0, (g_r(2) - v_f_dot(2)), 0, -(g_r(0) - v_f_dot(0)), two_term(1,0), two_term(1,1), two_term(1,2), two_term(1,3), two_term(1,4), two_term(1,5),
          0, -(g_r(1) - v_f_dot(1)), (g_r(0) - v_f_dot(0)), 0, two_term(2,0), two_term(2,1), two_term(2,2), two_term(2,3), two_term(2,4), two_term(2,5);
+         */
+
+  phi << v_f_dot(0) - g_r(0), w_o_dot_skew(0,0) + w_o_skew_double(0,0), w_o_dot_skew(0,1) + w_o_skew_double(0,1), w_o_dot_skew(0,2) + w_o_skew_double(0,2), 0, 0, 0, 0, 0, 0,
+         v_f_dot(1) - g_r(1), w_o_dot_skew(1,0) + w_o_skew_double(1,0), w_o_dot_skew(1,1) + w_o_skew_double(1,1), w_o_dot_skew(1,2) + w_o_skew_double(1,2), 0, 0, 0, 0, 0, 0,
+         v_f_dot(2) - g_r(2), w_o_dot_skew(2,0) + w_o_skew_double(2,0), w_o_dot_skew(2,1) + w_o_skew_double(2,1), w_o_dot_skew(2,2) + w_o_skew_double(2,2), 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, two_term(0,0), two_term(0,1), two_term(0,2), two_term(0,3), two_term(0,4), two_term(0,5),
+         0, 0, 0, 0, two_term(1,0), two_term(1,1), two_term(1,2), two_term(1,3), two_term(1,4), two_term(1,5),
+         0, 0, 0, 0, two_term(2,0), two_term(2,1), two_term(2,2), two_term(2,3), two_term(2,4), two_term(2,5);
+
 /*
   PE = phi.transpose()*phi;
   sum_PE = sum_PE + PE;
@@ -317,6 +365,11 @@ void estimation_model(){
     phi_sum.setZero();
     count = 0;
   }
+  */
+  /*
+  theta_hat(1) = theta_hat(0) * 0.75;
+  theta_hat(2) = theta_hat(0)*0;
+  theta_hat(3) = theta_hat(0)*0;
   */
   u_r_o_hat = phi*theta_hat;
   //H.transpose()*(H*H.transpose()).inverse()*
@@ -397,9 +450,8 @@ void estimation_model(){
   P = (1/delta)*(I10 - K*phi)*P;
 
 
-
   theta_hat = theta_hat - K*(u_r_o_hat - u_r_o);
-
+}
   /*
   if(theta_hat(7) > 0.256){
     ROS_INFO("success!");
@@ -414,7 +466,7 @@ void estimation_model(){
     delta = 0.999;
   }
 */
-}
+
 
 
 
@@ -445,9 +497,12 @@ int main(int argc, char **argv)
   ros::Publisher p_ref_pub = nh.advertise<geometry_msgs::Point>("/p_ref", 2);
   ros::Publisher follower_imu_angular_v_pub = nh.advertise<geometry_msgs::Point>("/follower_angular_v", 2);
   ros::Publisher pose_pub = nh.advertise<geometry_msgs::Point>("/pose", 2);
-  rate_r = 50;
+  ros::Publisher u_r_o_pub = nh.advertise<geometry_msgs::Point>("/u_r_o", 2);
+  ros::Publisher Jav_pub = nh.advertise<geometry_msgs::Point>("/Javerage", 2);
+  ros::Publisher alpha_pub = nh.advertise<geometry_msgs::Point>("/alpha", 2);
+  rate_r = 30;
   ros::Rate rate(rate_r);
-  theta_hat << 1, 1, 1, 1, 1, 1, 1, 1, 1, 1;
+  theta_hat << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
   P << 1.0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 1.0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 0, 1.0, 0, 0, 0, 0, 0, 0, 0,
@@ -458,9 +513,9 @@ int main(int argc, char **argv)
        0, 0, 0, 0, 0, 0, 0, 1.0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 1.0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 1.0;
-  R << 1, 0, 0, 0, 0, 0,
-       0, 1, 0, 0, 0, 0,
-       0, 0, 1, 0, 0, 0,
+  R << 0.01, 0, 0, 0, 0, 0,
+       0, 0.01, 0, 0, 0, 0,
+       0, 0, 0.01, 0, 0, 0,
        0, 0, 0, 1, 0, 0,
        0, 0, 0, 0, 1, 0,
        0, 0, 0, 0, 0, 1;
@@ -474,6 +529,7 @@ int main(int argc, char **argv)
 
   double running_time;
   int count = 1;
+  int count1 = 1;
   while(ros::ok()){
     quaternionToRPY();
     double filtertt;
@@ -482,7 +538,7 @@ int main(int argc, char **argv)
     m.x = theta_hat(0);
     m.y = 0.3;
     m.z = average_m;
-    J.x = average_Jyy;//theta_hat(4)
+    J.x = theta_hat(4);//theta_hat(4)
     J.y = theta_hat(7);//theta_hat(7)
     J.z = theta_hat(9);//theta_hat(9)
     J_product.x = theta_hat(5);
@@ -491,14 +547,14 @@ int main(int argc, char **argv)
     J_product_ref.x = 0;
     J_product_ref.y = 0;
     J_product_ref.z = 0;
-    J_ref.x = 2.2*1e-5;
-    J_ref.y = 0.192;
-    J_ref.z = 0.192;//0.256
+    J_ref.x = 2.8*1e-6;//2.2*1e-5
+    J_ref.y = 1.4*1e-6;//0.192
+    J_ref.z = 1.4*1e-6;//0.256
 
     p_ref.x = 0.75;
     p_ref.y = 0.0;
     p_ref.z = 0.0;
-
+    alpha_pub.publish(alpha_m);
     //pose.x = follower_force.z;
     //pose.y = leader_mocap.pose.position.z;
     //pose.z = leader_mocap.pose.position.z;
@@ -510,9 +566,10 @@ int main(int argc, char **argv)
     J_product_ref_pub.publish(J_product_ref);
     p_pub.publish(p);
     p_ref_pub.publish(p_ref);
+    u_r_o_pub.publish(u_r_o_measure);
     follower_imu_angular_v_pub.publish(follower_imu_angular_v);
     running_time = ros::Time::now().toSec() - first_time;
-    if(running_time > 5){
+    if(running_time > 3){
       average_flag = 1;
 
     }
@@ -530,9 +587,13 @@ int main(int argc, char **argv)
     average_m = sum_m/count;
     average_Jyy = sum_Jyy/count;
     average_Jxx = sum_Jxx/count;
-    p.x = -theta_hat(1)/average_m;
-    p.y = 0.5*(leader_mocap.pose.position.x - follower_mocap.pose.position.x);//theta_hat(2)/average_m
-    p.z = -leader_force.x;;//theta_hat(3)/average_m
+    J_average.x = average_Jxx;
+    J_average.y = average_Jyy;
+    J_average.z = average;
+    Jav_pub.publish(J_average);
+    p.x = theta_hat(1)/average_m;
+    p.y = theta_hat(2)/average_m;//theta_hat(2)/average_m
+    p.z = theta_hat(3)/average_m;;//theta_hat(3)/average_m
     count+=1;
     }
     filtertt = lpaverage.filter(theta_hat(9));
@@ -540,6 +601,7 @@ int main(int argc, char **argv)
     ROS_INFO("tx = %f, ty = %f, tz = %f", p.x,p.y,p.z);
     ROS_INFO("J_xx = %f, J_yy = %f, J_zz = %f", theta_hat(4), theta_hat(7), theta_hat(9));
     ROS_INFO("average_Jzz = %f, average_Jyy = %f, average_m = %f", average, average_Jyy, average_m);
+
 
 }
 

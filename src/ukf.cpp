@@ -160,7 +160,7 @@ void ukf::correct(Eigen::VectorXd measure){
     Eigen::Matrix4d phi_q_k;
     Eigen::Vector4d q_k1;
 
-    a = 3;
+    a = 1.7;
     f = 2 * a +1;
     quat_m_value = quat_m(0) * quat_m(0) + quat_m(1) * quat_m(1) + quat_m(2) * quat_m(2) + quat_m(3) * quat_m(3);
 
@@ -219,9 +219,9 @@ void ukf::correct(Eigen::VectorXd measure){
 
     x = x_hat + Kalman_gain *(y-y_hat);
     P = P_ - Kalman_gain*P_yy*(Kalman_gain.transpose());
+
     p_value = x[6]*x[6]+x[7]*x[7]+x[8]*x[8];
     p << x[6], x[7], x[8];
-
     delta_q_ks = (-a*(p_value) + f*sqrt(f*f+(1-a*a)*(p_value)))/(f*f+p_value);
     delta_q_kv = (a + delta_q_ks)*p/f;
     delta_q_k << delta_q_kv, delta_q_ks;
@@ -243,6 +243,7 @@ void ukf::correct(Eigen::VectorXd measure){
     double roll,pitch,yaw;
     tf::Matrix3x3(quat_transform).getRPY(roll,pitch,yaw);
     euler_angle << roll*(180/3.1415926),pitch*(180/3.1415926),yaw*(180/3.1415926);
+    quaternion << q_k1(0),q_k1(1),q_k1(2),q_k1(3);
 
 }
 
