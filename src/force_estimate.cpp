@@ -18,7 +18,7 @@
 #define k 0.02
 int drone_flag;
 forceest forceest1(statesize,measurementsize);
-geometry_msgs::Point euler, euler_ref, force, torque, bias, angular_v;
+geometry_msgs::Point euler, euler_ref, force, torque, bias, angular_v,pwm;
 sensor_msgs::Imu drone2_imu;
 void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
   drone2_imu = *msg;
@@ -73,10 +73,13 @@ int main(int argc, char **argv)
   ros::Publisher torque_pub = nh.advertise<geometry_msgs::Point>("torque", 2);
   ros::Publisher bias_pub = nh.advertise<geometry_msgs::Point>("bias", 2);
   ros::Publisher angular_v_pub = nh.advertise<geometry_msgs::Point>("angular_v", 2);
+  ros::Publisher pwm_pub = nh.advertise<geometry_msgs::Point>("pwm", 2);
   ros::Rate loop_rate(30);
 
 
   double measure_ex, measure_ey, measure_ez;
+  double sum_pwm;
+  int count = 1;
   Eigen::MatrixXd mnoise;
   mnoise.setZero(measurementsize,measurementsize);
   mnoise   = 3e-3*Eigen::MatrixXd::Identity(measurementsize , measurementsize);
@@ -212,7 +215,13 @@ if(drone_flag==2){
 
 }
     forceest1.thrust = F1 + F2 + F3 + F4;
+    pwm.x = pwm1+pwm2+pwm3+pwm4;
+    sum_pwm =sum_pwm + pwm1+pwm2+pwm3+pwm4;
+    pwm.y = sum_pwm / count;
+    count = count + 1;
+    pwm.z = pwm3;
 
+    pwm_pub.publish(pwm);
     std::cout << "----------thrust-------" << std::endl;
     std::cout << forceest1.thrust << std::endl;
 

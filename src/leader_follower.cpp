@@ -59,9 +59,16 @@ bool landing;
 
 int current_state_zone = 0;
 int last_state_zone = 0;
+
+
+
+int current_state_zone_y = 0;
+int last_state_zone_y = 0;
+
 int controller_state;
-const double u_bound = 1.5;
-const double l_bound = -1.5;
+int controller_state_y;
+const double u_bound = 0.7;//1.5
+const double l_bound = -0.7;//1.5
 
 double time_now;
 double lastime;
@@ -378,12 +385,21 @@ FFy_filt = lpFFy.filter(FF_y);
 
 
 last_state_zone = current_state_zone;
+last_state_zone_y = current_state_zone_y;
 if(FLx_filt > u_bound){
   current_state_zone = positive_zone;
 }else if(FLx_filt < l_bound){
   current_state_zone = negative_zone;
 }else{
   current_state_zone = zero_zone;
+}
+
+if(FLy_filt > u_bound){
+  current_state_zone_y = positive_zone;
+}else if(FLy_filt < l_bound){
+  current_state_zone_y = negative_zone;
+}else{
+  current_state_zone_y = zero_zone;
 }
 
 lastime = time_now;
@@ -395,7 +411,7 @@ if((current_state_zone == positive_zone) && (last_state_zone == zero_zone)){
   last_updat_time = time_now;
 }
 
-if((controller_state == positive_engaged) && FLx_filt < 1){
+if((controller_state == positive_engaged) && FLx_filt < 0.5){
   controller_state = disengaged;
   vir.x = host_mocap.pose.position.x;
   last_updat_time = time_now;
@@ -404,9 +420,29 @@ if((current_state_zone == negative_zone) && (last_state_zone == zero_zone)){
   controller_state = negative_engaged;
   last_updat_time = time_now;
 }
-if((controller_state == negative_engaged) && FLx_filt > -1){
+if((controller_state == negative_engaged) && FLx_filt > -0.5){
   controller_state = disengaged;
   vir.x = host_mocap.pose.position.x;
+  last_updat_time = time_now;
+}
+///y
+if((current_state_zone_y == positive_zone) && (last_state_zone_y == zero_zone)){
+  controller_state_y = positive_engaged;
+  last_updat_time = time_now;
+}
+
+if((controller_state_y == positive_engaged) && FLy_filt < 0.5){
+  controller_state_y = disengaged;
+  vir.y = host_mocap.pose.position.y;
+  last_updat_time = time_now;
+}
+if((current_state_zone_y == negative_zone) && (last_state_zone_y == zero_zone)){
+  controller_state_y = negative_engaged;
+  last_updat_time = time_now;
+}
+if((controller_state_y == negative_engaged) && FLy_filt > -0.5){
+  controller_state_y = disengaged;
+  vir.y = host_mocap.pose.position.y;
   last_updat_time = time_now;
 }
 //trigger.y = FLx_filt;
@@ -489,11 +525,11 @@ if(force_control){
   ux = KPx*errx;
   uy = KPy*erry;
   uz = KPz*errz;
+
 //Schmitt trigger
   if(controller_state == positive_engaged){
     trigger.x = 1.5;
     ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
-    uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
     //ux = 0.4 * FLx_filt;
     //ux = -0.4 * FFx_filt;
     if(ux > 1){
@@ -507,7 +543,7 @@ if(force_control){
   if(controller_state == negative_engaged){
     trigger.x = -1.5;
     ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
-    uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
+    //uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
     //ux = 0.4 * FLx_filt;
     //ux = -0.4 * FFx_filt;
     if(ux < -1){
@@ -516,6 +552,30 @@ if(force_control){
     if(uy < -1){
       uy = -1;
     }
+    flag1 = 1;
+  }
+  //y
+  if(controller_state_y == positive_engaged){
+    trigger.y = 1.5;
+    uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
+    //ux = 0.4 * FLx_filt;
+    //ux = -0.4 * FFx_filt;
+    if(uy > 1){
+      uy = 1;
+    }
+
+    flag1 = 1;
+  }
+  if(controller_state_y == negative_engaged){
+    trigger.y = -1.5;
+    uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
+    //uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
+    //ux = 0.4 * FLx_filt;
+    //ux = -0.4 * FFx_filt;
+    if(uy < -1){
+      uy = -1;
+    }
+
     flag1 = 1;
   }
 
@@ -681,12 +741,12 @@ int main(int argc, char **argv)
     vs2.twist.angular.z = 0;
     vir1.x = 0.8;
     vir1.y = 0;
-    vir1.z = 0.7;
+    vir1.z = 0.9;
     vir1.roll = 0;
 
     vir2.x = -0.8;
     vir2.y = 0;
-    vir2.z = 0.7;
+    vir2.z = 0.9;
     vir2.roll = 0;
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){

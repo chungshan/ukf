@@ -155,6 +155,7 @@ void estimation_model(){
   double Jyy_test;
   double Jyy_av;
   Eigen::Vector3d pf,pl;
+  double e_sum;
   residual = 0;
   p = 1.2;
   alpha = 0.997395;
@@ -217,9 +218,9 @@ void estimation_model(){
   H << 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
        0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
        0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-       0, -pf(2), pf(1),0, 0, 0,0, -pl(2), pl(1),0, 0, 0,
-       pf(2), 0, -pf(0), 0, 0, 0, pl(2), 0, -pl(0), 0, 0, 0,
-      -pf(1), pf(0), 0, 0, 0, 0,-pl(1), pl(0), 0, 0, 0, 0;
+       0, -pf(2), pf(1),1, 0, 0,0, -pl(2), pl(1),1, 0, 0,
+       pf(2), 0, -pf(0), 0, 1, 0, pl(2), 0, -pl(0), 0, 1, 0,
+      -pf(1), pf(0), 0, 0, 0, 1,-pl(1), pl(0), 0, 0, 0, 1;
   u_r_o = H * u_l_f;
 
 
@@ -278,7 +279,7 @@ void estimation_model(){
   v_f_dot_body(0) = (follower_imu.linear_acceleration.x - a_g_body(0));
   v_f_dot_body(1) = (follower_imu.linear_acceleration.y + a_g_body(1));
   v_f_dot_body(2) = (follower_imu.linear_acceleration.z - a_g_body(2));
-  v_f_dot = 0*(Rz*Rx*Ry).inverse()*v_f_dot_body;
+  v_f_dot = (Rz*Rx*Ry).inverse()*v_f_dot_body;
   g << 0, 0, -9.8;
   //follower_imu.angular_velocity.x = 0;
   g_r = Ry*Rx*Rz*g;
@@ -286,9 +287,7 @@ void estimation_model(){
   w_o_dot_x = lpf_alpha_x.filter((follower_imu.angular_velocity.x - last_w_o_x) * rate_r);
   w_o_dot_y = lpf_alpha_y.filter((follower_imu.angular_velocity.y - last_w_o_y) * rate_r);
   w_o_dot_z = lpf_alpha_z.filter((follower_imu.angular_velocity.z - last_w_o_z) * rate_r);
-  alpha_m.x = w_o_dot_x;
-  alpha_m.y = w_o_dot_y;
-  alpha_m.z = w_o_dot_z;
+
 
 /*
   w_o_dot_x = (follower_imu.angular_velocity.x - last_w_o_x) * rate_r;
@@ -376,6 +375,8 @@ void estimation_model(){
   //forgetting factor
 
   e = u_r_o - u_r_o_hat;
+  e_sum = e(0)*e(0) + e(1)*e(1) + e(2)*e(2) + e(3)*e(3) + e(4)*e(4) + e(5)*e(5);
+  alpha_m.x = e_sum;
 /*
   e2 << e(0)*e(0), e(1)*e(1), e(2)*e(2), e(3)*e(3), e(4)*e(4), e(5)*e(5);
   q = phi*P*phi.transpose();
