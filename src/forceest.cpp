@@ -17,17 +17,17 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         double ex = sigma_state(e_x,i); // delta_p
         double ey = sigma_state(e_y,i);
         double ez = sigma_state(e_z,i);
-/*
+
         double omegax = sigma_state(omega_x,i);
         double omegay = sigma_state(omega_y,i);
         double omegaz = sigma_state(omega_z,i);
-*/
 
 
+/*
         double omegax;
         double omegay;
         double omegaz;
-
+*/
         double Fx = sigma_state(F_x,i);
 
         double Fy = sigma_state(F_y,i);
@@ -83,13 +83,13 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         J << 0.0625, 0, 0,  //0.0625,0.0625,0.12656
              0, 0.0625, 0,
              0, 0, 0.12656;
-        //omega_v << omegax, omegay, omegaz;
+        omega_v << omegax, omegay, omegaz;
         torque_v << 0, 0, tauz;
         //beta << betax, betay, betaz;
         //USQUE
         delta_p << ex, ey, ez;
         p_v << px, py, pz;
-        a = 1.7;
+        a = 3; //1.7
         f = 2*a + 1;
         delta_t = 0.0333333;
 
@@ -130,11 +130,11 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
           omegaz = 0.0001;
         }
 
-        omegax = angular_v_measure(0) - betax;
-        omegay = angular_v_measure(1) - betay;
-        omegaz = angular_v_measure(2) - betaz;
+        //omegax = angular_v_measure(0) - betax;
+        //omegay = angular_v_measure(1) - betay;
+        //omegaz = angular_v_measure(2) - betaz;
 
-        omega_v1 << omegax, omegay, omegaz;
+        //omega_v1 << omegax, omegay, omegaz;
         omega_value = omegax*omegax+omegay*omegay+omegaz*omegaz;
         omega << cos(0.5*sqrt(omega_value)*delta_t), sin(0.5*sqrt(omega_value)*delta_t)*omegaz/(sqrt(omega_value)), -sin(0.5*sqrt(omega_value)*delta_t)*omegay/(sqrt(omega_value)), sin(0.5*sqrt(omega_value)*delta_t)*omegax/(sqrt(omega_value)),
                  -sin(0.5*sqrt(omega_value)*delta_t)*omegaz/(sqrt(omega_value)), cos(0.5*sqrt(omega_value)*delta_t), sin(0.5*sqrt(omega_value)*delta_t)*omegax/(sqrt(omega_value)), sin(0.5*sqrt(omega_value)*delta_t)*omegay/(sqrt(omega_value)),
@@ -210,7 +210,7 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
 
         //rotation
 
-        //omega_v1 = omega_v + delta_t * J.inverse()*(U + torque_v - omega_v.cross(J*omega_v));
+        omega_v1 = omega_v + delta_t * J.inverse()*(U + torque_v - omega_v.cross(J*omega_v));
 
         //
 
@@ -231,11 +231,11 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         predict_sigma_state(v_x,i) = v_k1(0);
         predict_sigma_state(v_y,i) = v_k1(1);
         predict_sigma_state(v_z,i) = v_k1(2);
-/*
+
         predict_sigma_state(omega_x,i) = omega_v1(0);
         predict_sigma_state(omega_y,i) = omega_v1(1);
         predict_sigma_state(omega_z,i) = omega_v1(2);
-*/
+
 
         predict_sigma_state(beta_x,i) = betax;
         predict_sigma_state(beta_y,i) = betay;
@@ -267,11 +267,11 @@ Eigen::MatrixXd forceest::state_to_measure(Eigen::MatrixXd sigma_state){
         predict_sigma_measure( me_y ,i) =   sigma_state(e_y,i);
         predict_sigma_measure( me_z ,i) =   sigma_state(e_z,i);
 
-/*
+
         predict_sigma_measure( momega_x ,i) =   sigma_state(omega_x,i);
         predict_sigma_measure( momega_y ,i) =   sigma_state(omega_y,i);
         predict_sigma_measure( momega_z ,i) =   sigma_state(omega_z,i);
-*/
+
 /*
         predict_sigma_measure( mq_x ,i) =   sigma_state(q_x,i);
         predict_sigma_measure( mq_y ,i) =   sigma_state(q_y,i);

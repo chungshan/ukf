@@ -19,14 +19,15 @@
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
+#include <geometry_msgs/Vector3Stamped.h>
+#include <geometry_msgs/TwistStamped.h>
 #define pi 3.1415926
 int flag=0;
 float KPx = 1.5;
 float KPy = 1.5;
 float KPz = 1.5;
 float KProll = 1;
-double KIz = 1;
-double sum_errx,sum_erry,sum_errz;
+bool start = false;
 using namespace std;
 typedef struct vir
 {
@@ -47,6 +48,13 @@ void host_pos(const geometry_msgs::PoseStamped::ConstPtr& msg)
   host_mocap = *msg;
 
 }
+geometry_msgs::TwistStamped host_vel;
+void host_vel_cb(const geometry_msgs::TwistStamped::ConstPtr& msg)
+{
+
+  host_vel = *msg;
+
+}
 float qua2eul(geometry_msgs::PoseStamped& host_mocap)
 {
     float pitch,yaw,roll,qx2,qy2,qz2,qw2;
@@ -61,13 +69,14 @@ float qua2eul(geometry_msgs::PoseStamped& host_mocap)
 
     return roll;
 }
-void follow(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped* vs, float dis_x, float dis_y)
+double sum_errx,sum_erry,sum_errz;
+void follow(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::Vector3Stamped* vs, float dis_x, float dis_y)
 {
 float errx, erry, errz, err_roll;
 float ux, uy, uz, uroll;
 //float dis_x = 0, dis_y = -0.5;
 float local_x, local_y;
-
+double err_vx,err_vy,err_vz;
 local_x = cos(vir.roll)*dis_x+sin(vir.roll)*dis_y;
 local_y = -sin(vir.roll)*dis_x+cos(vir.roll)*dis_y;
 
@@ -75,15 +84,15 @@ errx = vir.x - host_mocap.pose.position.x - local_x;
 erry = vir.y - host_mocap.pose.position.y - local_y;
 errz = vir.z - host_mocap.pose.position.z - 0;
 err_roll = vir.roll - qua2eul(host_mocap);
-if(err_roll>pi)
-err_roll = err_roll - 2*pi;
-else if(err_roll<-pi)
-err_roll = err_roll + 2*pi;
 
-ROS_INFO("err_roll: %.3f",err_roll);
+err_vx = 0 - host_vel.twist.linear.x;
+err_vy = 0 - host_vel.twist.linear.y;
+err_vz = 0 - host_vel.twist.linear.z;
+
 sum_errx = sum_errx + errx;
 sum_erry = sum_erry + erry;
 sum_errz = sum_errz + errz;
+
 if(sum_errx > 0.2){
   sum_errx = 0.2;
 }
@@ -102,16 +111,26 @@ if(sum_errz > 0.2){
 if(sum_errz < -0.2){
   sum_errz = -0.2;
 }
-ux = KPx*errx;
-uy = KPy*erry;
-uz = KPz*errz;
+
+if(err_roll>pi)
+err_roll = err_roll - 2*pi;
+else if(err_roll<-pi)
+err_roll = err_roll + 2*pi;
+
+//ROS_INFO("err_roll: %.3f",err_roll);
+//1.7,0.4
+//1.5,0.38
+ux = KPx*errx + 0.38*err_vx + 0.0*sum_errx;
+uy = KPy*erry + 0.38*err_vy + 0.0*sum_erry;
+uz = KPz*errz + 0.4*err_vz + 0.0*sum_errz;
 uroll = KProll*err_roll;
-ROS_INFO("uz = %f", uz);
-ROS_INFO("err_z = %f",errz);
-vs->twist.linear.x = ux;
-vs->twist.linear.y = uy;
-vs->twist.linear.z = uz;
-vs->twist.angular.z = uroll;
+ROS_INFO("ux = %f, uy = %f, uz = %f", ux, uy, uz);
+ROS_INFO("errz = %f", errz);
+ROS_INFO("sumx = %f, sumy = %f, sumz = %f", sum_errx, sum_erry, sum_errz);
+vs->vector.x = ux;
+vs->vector.y = uy;
+vs->vector.z = uz;
+//vs->twist.angular.z = uroll;
 
 }
 /*
@@ -153,24 +172,27 @@ char getch()
  */
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "follow_test");
+    ros::init(argc, argv, "leader_acc");
     ros::NodeHandle nh;
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
-                                ("/mavros/state", 2, state_cb);
+                                ("drone3/mavros/state", 2, state_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("/mavros/setpoint_position/local", 2);
-    ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("/mavros/mocap/pose", 2);
+                                   ("drone3/mavros/setpoint_position/local", 2);
+    //ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
+    //                               ("drone3/mavros/mocap/pose", 2);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
-                                       ("/mavros/cmd/arming");
+                                       ("drone3/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
-                                         ("/mavros/set_mode");
+                                         ("drone3/mavros/set_mode");
     ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody3/pose", 2, host_pos);
-    //ros::Publisher mocap_pub = nh.advertise<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 2);
+    ros::Subscriber host_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("/drone3/mavros/local_position/velocity", 2, host_vel_cb);
 
-    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("/mavros/setpoint_velocity/cmd_vel", 2);
-
+    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("drone3/mavros/setpoint_velocity/cmd_vel", 2);
+    ros::Publisher local_acc_pub = nh.advertise<geometry_msgs::Vector3Stamped>("drone3/mavros/setpoint_accel/accel", 2);
+    bool force_flag;
+    force_flag = false;
+    nh.setParam("drone3/mavros/setpoint_accel/send_force", force_flag);
     // The setpoint publishing rate MUST be faster than 2Hz.
     ros::AsyncSpinner spinner(2);
     spinner.start();
@@ -178,31 +200,39 @@ int main(int argc, char **argv)
     //sss
     // Wait for FCU connection.
     while (ros::ok() && current_state.connected) {
-        //mocap_pos_pub.publish(host_mocap);
+  //mocap_pos_pub.publish(host_mocap);
         ros::spinOnce();
         rate.sleep();
     }
 
-
+    float r = 0.5, a = 1;
+    float T = 2*pi;
+    float dt = 0.02;
+    float t = 0;
     geometry_msgs::PoseStamped pose;
-    geometry_msgs::TwistStamped vs;
+    //geometry_msgs::TwistStamped vs;
+    geometry_msgs::Vector3Stamped vs;
   vir vir1;
-
+/*
     vs.twist.linear.x = 0;
     vs.twist.linear.y = 0;
     vs.twist.linear.z = 0;
     vs.twist.angular.x = 0;
     vs.twist.angular.y = 0;
     vs.twist.angular.z = 0;
-
+*/
+  vs.vector.x = 0;
+  vs.vector.y = 0;
+  vs.vector.z = 0;
   vir1.x = 0.0;
   vir1.y = 0.0;
-  vir1.z = 0.9;
+  vir1.z = 0.7;
   vir1.roll = 0;
 
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
-        local_vel_pub.publish(vs);
+        //local_vel_pub.publish(vs);
+     local_acc_pub.publish(vs);
     //mocap_pos_pub.publish(host_mocap);
     ros::spinOnce();
         rate.sleep();
@@ -285,8 +315,8 @@ int main(int argc, char **argv)
                 break;
         case 115:    // stop
     {
-    //vir1.x = 0.6;
-        //vir1.y = -0.5;
+    //vir1.x = 0.0;
+        //vir1.y = 0.0;
     vir1.z = 0;
     vir1.roll = 0;
                 break;
@@ -299,6 +329,17 @@ int main(int argc, char **argv)
       arming_client.call(arm_cmd);
             break;
       }
+            case 116:    // t
+                  {
+                    if(start == true){
+                    start = false;
+                    }
+                    else if(start == false){
+                    start = true;
+                    }
+
+                  break;
+                  }
             case 63:
                 return 0;
                 break;
@@ -309,11 +350,19 @@ int main(int argc, char **argv)
     else if(vir1.roll<-pi)
     vir1.roll = vir1.roll + 2*pi;
 
-        ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
+    if(start == true){
+    //circle
+    vir1.x = r*cos(2*pi*t/T);
+    vir1.y = r*sin(2*pi*t/T);
+
+    t += dt;
+
+    }
+        //ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
     follow(vir1,host_mocap,&vs,0,0.0);
         //mocap_pos_pub.publish(host_mocap);
-         local_vel_pub.publish(vs);
-         //mocap_pub.publish( host_mocap);
+        //local_vel_pub.publish(vs);
+        local_acc_pub.publish(vs);
         //ros::spinOnce();
         rate.sleep();
     }

@@ -160,7 +160,7 @@ void ukf::correct(Eigen::VectorXd measure){
     Eigen::Matrix4d phi_q_k;
     Eigen::Vector4d q_k1;
 
-    a = 1.7;
+    a = 3;
     f = 2 * a +1;
     quat_m_value = quat_m(0) * quat_m(0) + quat_m(1) * quat_m(1) + quat_m(2) * quat_m(2) + quat_m(3) * quat_m(3);
 
