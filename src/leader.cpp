@@ -23,9 +23,9 @@
 int flag=0;
 float KPx = 1.5;
 float KPy = 1.5;
-float KPz = 1.5;
+float KPz = 1.2;
 float KProll = 1;
-double KIz = 1;
+double KIz = 0;
 double sum_errx,sum_erry,sum_errz;
 using namespace std;
 typedef struct vir
@@ -104,7 +104,7 @@ if(sum_errz < -0.2){
 }
 ux = KPx*errx;
 uy = KPy*erry;
-uz = KPz*errz;
+uz = KPz*errz + KIz * sum_errz;
 uroll = KProll*err_roll;
 ROS_INFO("uz = %f", uz);
 ROS_INFO("err_z = %f",errz);
@@ -157,19 +157,20 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
-                                ("/mavros/state", 2, state_cb);
+                                ("/drone3/mavros/state", 2, state_cb);
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("/mavros/setpoint_position/local", 2);
+                                   ("/drone3/mavros/setpoint_position/local", 2);
     ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("/mavros/mocap/pose", 2);
+                                   ("/drone3/mavros/mocap/pose", 2);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
-                                       ("/mavros/cmd/arming");
+                                       ("/drone3/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
-                                         ("/mavros/set_mode");
-    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody3/pose", 2, host_pos);
+                                         ("/drone3/mavros/set_mode");
+    //ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 2, host_pos);
+    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/drone3/mavros/local_position/pose", 2, host_pos);
     //ros::Publisher mocap_pub = nh.advertise<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 2);
 
-    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("/mavros/setpoint_velocity/cmd_vel", 2);
+    ros::Publisher local_vel_pub = nh.advertise<geometry_msgs::TwistStamped>("/drone3/mavros/setpoint_velocity/cmd_vel", 2);
 
     // The setpoint publishing rate MUST be faster than 2Hz.
     ros::AsyncSpinner spinner(2);
@@ -187,7 +188,6 @@ int main(int argc, char **argv)
     geometry_msgs::PoseStamped pose;
     geometry_msgs::TwistStamped vs;
   vir vir1;
-
     vs.twist.linear.x = 0;
     vs.twist.linear.y = 0;
     vs.twist.linear.z = 0;
@@ -197,12 +197,15 @@ int main(int argc, char **argv)
 
   vir1.x = 0.0;
   vir1.y = 0.0;
-  vir1.z = 0.9;
+  vir1.z = 0.5;
   vir1.roll = 0;
-
+    pose.pose.position.x = 0;
+    pose.pose.position.y = 0;
+    pose.pose.position.z = 0.7;
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
         local_vel_pub.publish(vs);
+        //local_pos_pub.publish(pose);
     //mocap_pos_pub.publish(host_mocap);
     ros::spinOnce();
         rate.sleep();
@@ -261,9 +264,11 @@ int main(int argc, char **argv)
             switch (c) {
             case 65:    // key up
                 vir1.z += 0.05;
+                pose.pose.position.z +=0.05;
                 break;
             case 66:    // key down
                 vir1.z += -0.05;
+                pose.pose.position.z -=0.05;
                 break;
             case 67:    // key CW(->)
                 vir1.roll -= 0.05;
@@ -288,6 +293,7 @@ int main(int argc, char **argv)
     //vir1.x = 0.6;
         //vir1.y = -0.5;
     vir1.z = 0;
+    pose.pose.position.z = 0;
     vir1.roll = 0;
                 break;
     }
@@ -313,6 +319,7 @@ int main(int argc, char **argv)
     follow(vir1,host_mocap,&vs,0,0.0);
         //mocap_pos_pub.publish(host_mocap);
          local_vel_pub.publish(vs);
+         //local_pos_pub.publish(pose);
          //mocap_pub.publish( host_mocap);
         //ros::spinOnce();
         rate.sleep();
