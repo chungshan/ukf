@@ -1,9 +1,12 @@
 <launch>
 <group ns = "follower_ukf">
-   <node pkg="UKF" name="ukf" type="force_estimate" output="screen" >
+   <node pkg="UKF" name="ukf" type="force_estimatee" output="screen" >
      <param name="topic_imu" value="/drone2/mavros/imu/data" />
+     <param name="topic_raw" value="/drone2/mavros/imu/data_raw" />
      <param name="topic_mocap" value="/vrpn_client_node/RigidBody2/pose" />
      <param name="topic_thrust" value="/drone2/mavros/rc/out" />
+     <param name="topic_mag" value="/drone2/mavros/imu/mag" />
+     <param name="topic_battery" value="/drone2/mavros/battery" />
      <param name="topic_vel" value="/drone2/mavros/local_position/velocity" />
      <param name="topic_drone" value="2" />
    </node>
