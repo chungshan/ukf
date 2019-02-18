@@ -26,10 +26,12 @@
 #include <eigen3/Eigen/Dense>
 #include "lpf2.h"
 #include <UKF/output.h>
+#include <nav_msgs/Odometry.h>
 //
 double err_sumx , err_sumy , err_sumz;
 double err_diffx , err_diffy , err_diffz;
 double last_errx,last_erry,last_errz;
+double vio_pitch,vio_roll,vio_yaw;
 bool force_control;
 bool velocity_forward;
 bool velocity_backward;
@@ -40,6 +42,7 @@ bool velocity_rightward;
 bool velocity_zero;
 bool velocity_circle;
 double theta_c;
+bool init = false;
 int flag1 = 0;
 geometry_msgs::Point trigger;
 geometry_msgs::Point force_error, pos_error;
@@ -142,14 +145,29 @@ void host_pos2(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
   host_mocap2 = *msg;
 }
-float qua2eul(geometry_msgs::PoseStamped& host_mocap)
+
+
+nav_msgs::Odometry odom;
+geometry_msgs::PoseStamped initial_pose;
+void odom_cb(const nav_msgs::Odometry::ConstPtr &msg){
+  odom = *msg;
+  if(init==false){
+    initial_pose.pose.position.x = odom.pose.pose.position.x;
+    initial_pose.pose.position.y = odom.pose.pose.position.y;
+    initial_pose.pose.position.z = odom.pose.pose.position.z;
+    init = true;
+  }
+  tf::Quaternion Q(odom.pose.pose.orientation.x,odom.pose.pose.orientation.y,odom.pose.pose.orientation.z,odom.pose.pose.orientation.w);
+  tf::Matrix3x3(Q).getRPY(vio_roll,vio_pitch,vio_yaw);
+}
+float qua2eul(nav_msgs::Odometry& host_mocap)
 {
     float pitch,yaw,roll,qx2,qy2,qz2,qw2;
-    qx2=(host_mocap.pose.orientation.x)*(host_mocap.pose.orientation.x);
-    qy2=(host_mocap.pose.orientation.y)*(host_mocap.pose.orientation.y);
-    qz2=(host_mocap.pose.orientation.z)*(host_mocap.pose.orientation.z);
-    qw2=(host_mocap.pose.orientation.w)*(host_mocap.pose.orientation.w);
-    roll = atan2(2*host_mocap.pose.orientation.z*host_mocap.pose.orientation.w+2*host_mocap.pose.orientation.x*host_mocap.pose.orientation.y , 1 - 2*qy2 - 2*qz2);
+    qx2=(host_mocap.pose.pose.orientation.x)*(host_mocap.pose.pose.orientation.x);
+    qy2=(host_mocap.pose.pose.orientation.y)*(host_mocap.pose.pose.orientation.y);
+    qz2=(host_mocap.pose.pose.orientation.z)*(host_mocap.pose.pose.orientation.z);
+    qw2=(host_mocap.pose.pose.orientation.w)*(host_mocap.pose.pose.orientation.w);
+    roll = atan2(2*host_mocap.pose.pose.orientation.z*host_mocap.pose.pose.orientation.w+2*host_mocap.pose.pose.orientation.x*host_mocap.pose.pose.orientation.y , 1 - 2*qy2 - 2*qz2);
     //roll = asin(2*host_mocap.pose.orientation.x*host_mocap.pose.orientation.y + 2*host_mocap.pose.orientation.z*host_mocap.pose.orientation.w);
     //pitch = atan2(2*host_mocap.pose.orientation.x*host_mocap.pose.orientation.w-2*host_mocap.pose.orientation.y*host_mocap.pose.orientation.z , 1 - 2*qx2 - 2*qz2);
   //ROS_INFO("eul: %.3f, %.3f, %.3f", pitch/pi*180, yaw/pi*180, roll/pi*180);
@@ -171,15 +189,15 @@ void quaternionToRPY(){
 
   tf::Quaternion quat(imu2.orientation.x, imu2.orientation.y, imu2.orientation.z, imu2.orientation.w);
 
-  if(host_mocap2.pose.orientation.w == 0)
+  if(odom.pose.pose.orientation.w == 0)
   {
-    host_mocap2.pose.orientation.w = 1;
+    odom.pose.pose.orientation.w = 1;
     flag2 = 0;
   }
-  if(host_mocap2.pose.orientation.w != 0 && host_mocap2.pose.orientation.w != 1)
+  if(odom.pose.pose.orientation.w != 0 && odom.pose.pose.orientation.w != 1)
     flag2 = 1;
 
-  tf::Quaternion quat1(host_mocap2.pose.orientation.x, host_mocap2.pose.orientation.y, host_mocap2.pose.orientation.z, host_mocap2.pose.orientation.w);
+  tf::Quaternion quat1(odom.pose.pose.orientation.x, odom.pose.pose.orientation.y, odom.pose.pose.orientation.z, odom.pose.pose.orientation.w);
 
   double roll, pitch, yaw;
   double yaw_bias;
@@ -284,7 +302,7 @@ local_y = -sin(vir.roll)*dis_x+cos(vir.roll)*dis_y;
 errx = vir.x - host_mocap.pose.position.x - local_x;
 erry = vir.y - host_mocap.pose.position.y - local_y;
 errz = vir.z - host_mocap.pose.position.z - 0;
-err_roll = vir.roll - qua2eul(host_mocap);
+//err_roll = vir.roll - qua2eul(host_mocap);
 if(err_roll>pi)
 err_roll = err_roll - 2*pi;
 else if(err_roll<-pi)
@@ -337,7 +355,7 @@ vs->twist.angular.z = uroll;
 }
 
 
-void follow_force(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped* vs, float dis_x, float dis_y)
+void follow_force(vir& vir, nav_msgs::Odometry& host_mocap, geometry_msgs::TwistStamped* vs, float dis_x, float dis_y)
 {
 float errx, erry, errz, err_roll;
 float ux, uy, uz, uroll;
@@ -355,17 +373,22 @@ double FLy_filt, FFy_filt;
 const double dt = 0.02;
 const float force_threshold = 1.5;
 double drone2_velx, drone2_vely;
+/*
 drone2_velx = drone2_vel.twist.linear.x;
 drone2_vely = drone2_vel.twist.linear.y;
+*/
+
+drone2_velx = odom.twist.twist.linear.x;
+drone2_vely = odom.twist.twist.linear.y;
 err_diffx = 0;
 err_diffy = 0;
 err_diffz = 0;
 local_x = cos(vir.roll)*dis_x+sin(vir.roll)*dis_y;
 local_y = -sin(vir.roll)*dis_x+cos(vir.roll)*dis_y;
-
-errx = vir.x - host_mocap.pose.position.x - local_x;
-erry = vir.y - host_mocap.pose.position.y - local_y;
-errz = vir.z - host_mocap.pose.position.z - 0;
+errx = vir.x - host_mocap.pose.pose.position.x - local_x;
+erry = vir.y - host_mocap.pose.pose.position.y - local_y;
+errz = vir.z - host_mocap.pose.pose.position.z - 0;
+ROS_INFO("errx = %f, erry = %f, errz = %f", errx, erry, errz);
 err_roll = vir.roll - qua2eul(host_mocap);
 if(err_roll>pi)
 err_roll = err_roll - 2*pi;
@@ -386,9 +409,9 @@ FFy_filt = lpFFy.filter(FF_y);
 
 last_state_zone = current_state_zone;
 last_state_zone_y = current_state_zone_y;
-if(FLx_filt > u_bound){
+if(-FFx_filt > u_bound){
   current_state_zone = positive_zone;
-}else if(FLx_filt < l_bound){
+}else if(-FFx_filt < l_bound){
   current_state_zone = negative_zone;
 }else{
   current_state_zone = zero_zone;
@@ -411,18 +434,18 @@ if((current_state_zone == positive_zone) && (last_state_zone == zero_zone)){
   last_updat_time = time_now;
 }
 
-if((controller_state == positive_engaged) && FLx_filt < 0.5){
+if((controller_state == positive_engaged) && -FFx_filt < 0.5){
   controller_state = disengaged;
-  vir.x = host_mocap.pose.position.x;
+  vir.x = host_mocap.pose.pose.position.x;
   last_updat_time = time_now;
 }
 if((current_state_zone == negative_zone) && (last_state_zone == zero_zone)){
   controller_state = negative_engaged;
   last_updat_time = time_now;
 }
-if((controller_state == negative_engaged) && FLx_filt > -0.5){
+if((controller_state == negative_engaged) && -FFx_filt > -0.5){
   controller_state = disengaged;
-  vir.x = host_mocap.pose.position.x;
+  vir.x = host_mocap.pose.pose.position.x;
   last_updat_time = time_now;
 }
 ///y
@@ -433,7 +456,7 @@ if((current_state_zone_y == positive_zone) && (last_state_zone_y == zero_zone)){
 
 if((controller_state_y == positive_engaged) && FLy_filt < 0.5){
   controller_state_y = disengaged;
-  vir.y = host_mocap.pose.position.y;
+  vir.y = host_mocap.pose.pose.position.y;
   last_updat_time = time_now;
 }
 if((current_state_zone_y == negative_zone) && (last_state_zone_y == zero_zone)){
@@ -442,7 +465,7 @@ if((current_state_zone_y == negative_zone) && (last_state_zone_y == zero_zone)){
 }
 if((controller_state_y == negative_engaged) && FLy_filt > -0.5){
   controller_state_y = disengaged;
-  vir.y = host_mocap.pose.position.y;
+  vir.y = host_mocap.pose.pose.position.y;
   last_updat_time = time_now;
 }
 //trigger.y = FLx_filt;
@@ -520,6 +543,7 @@ uroll = KProll*err_roll;
 
 
 if(force_control){
+  ROS_INFO("================Force control================");
   trigger.x = 0;
   trigger.y = 0;
   ux = KPx*errx;
@@ -527,9 +551,13 @@ if(force_control){
   uz = KPz*errz;
 
 //Schmitt trigger
+
+  //x
+  /*
   if(controller_state == positive_engaged){
     trigger.x = 1.5;
-    ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
+    ROS_INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!positive engaged!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    ux = 0*connector_vel.x + drone2_velx + 0.2*(1.5*FLx_filt - 0.5*FFx_filt);
     //ux = 0.4 * FLx_filt;
     //ux = -0.4 * FFx_filt;
     if(ux > 1){
@@ -542,7 +570,8 @@ if(force_control){
   }
   if(controller_state == negative_engaged){
     trigger.x = -1.5;
-    ux = 0*connector_vel.x + drone2_velx + 0.2 * (1.5*FLx_filt - 0.5*FFx_filt);
+    ROS_INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!negative engaged!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    ux = 0*connector_vel.x + drone2_velx + 0.2*(1.5*FLx_filt - 0.5*FFx_filt);
     //uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
     //ux = 0.4 * FLx_filt;
     //ux = -0.4 * FFx_filt;
@@ -554,7 +583,10 @@ if(force_control){
     }
     flag1 = 1;
   }
+  */
+
   //y
+
   if(controller_state_y == positive_engaged){
     trigger.y = 1.5;
     uy = 0*connector_vel.y + drone2_vely + 0.2 * (1.5*FLy_filt - 0.5*FFy_filt);
@@ -607,7 +639,7 @@ if(force_control){
   }
 
 }
-ROS_INFO("ux = %f", ux);
+ROS_INFO("ux = %f, uy = %f", ux, uy);
 
 vs->twist.linear.x = ux;
 vs->twist.linear.y = uy;
@@ -675,19 +707,21 @@ int main(int argc, char **argv)
 
 
     ros::Subscriber state_sub2 = nh.subscribe<mavros_msgs::State>
-                                ("drone2/mavros/state", 1, state_cb2);
-    ros::Subscriber imu_sub2 = nh.subscribe<sensor_msgs::Imu>("drone2/mavros/imu/data", 1, imu2_cb);
+                                ("/mavros/state", 1, state_cb2);
+    ros::Subscriber imu_sub2 = nh.subscribe<sensor_msgs::Imu>("/dji_sdk/imu", 1, imu2_cb);
     ros::Publisher local_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
                                    ("drone2/mavros/setpoint_position/local", 1);
     //ros::Publisher mocap_pos_pub2 = nh.advertise<geometry_msgs::PoseStamped>
     //                               ("drone2/mavros/mocap/pose", 1);
     ros::ServiceClient arming_client2 = nh.serviceClient<mavros_msgs::CommandBool>
-                                       ("drone2/mavros/cmd/arming");
+                                       ("/mavros/cmd/arming");
     ros::ServiceClient set_mode_client2 = nh.serviceClient<mavros_msgs::SetMode>
-                                         ("drone2/mavros/set_mode");
-    ros::Subscriber drone2_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("drone2/mavros/local_position/velocity", 1, drone2_vel_cb);
+                                         ("/mavros/set_mode");
+    //ros::Subscriber drone2_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("/mavros/local_position/velocity", 1, drone2_vel_cb);
+    ros::Subscriber odom_sub = nh.subscribe<nav_msgs::Odometry>("/vins_estimator/odometry", 2, odom_cb);
+
     ros::Subscriber host_sub2 = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 1, host_pos2);
-    ros::Publisher local_vel_pub2 = nh.advertise<geometry_msgs::TwistStamped>("drone2/mavros/setpoint_velocity/cmd_vel", 5);
+    ros::Publisher local_vel_pub2 = nh.advertise<geometry_msgs::TwistStamped>("/mavros/setpoint_velocity/cmd_vel", 5);
 
     ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_force", 2, leader_force_cb);
     ros::Subscriber follower_force_sub = nh.subscribe<UKF::output>("/follower_ukf/output", 1, follower_force_cb);
@@ -744,14 +778,16 @@ int main(int argc, char **argv)
     vir1.z = 0.9;
     vir1.roll = 0;
 
-    vir2.x = -0.8;
-    vir2.y = 0;
-    vir2.z = 0.9;
-    vir2.roll = 0;
+
     //send a few setpoints before starting
    for(int i = 100; ros::ok() && i > 0; --i){
         local_vel_pub.publish(vs);
         local_vel_pub2.publish(vs2);
+        vir2.x = initial_pose.pose.position.x;
+        vir2.y = initial_pose.pose.position.y;
+        vir2.z = initial_pose.pose.position.z + 0.5;
+        vir2.roll = vio_yaw;
+
     //mocap_pos_pub.publish(host_mocap);
     //mocap_pos_pub2.publish(host_mocap2);
     ros::spinOnce();
@@ -922,8 +958,8 @@ int main(int argc, char **argv)
 
                 //vir2.x = 0;
                     //vir2.y = -0.5;
-                vir2.z = 0;
-                vir2.roll = 0;
+                vir2.z = -10;
+                //vir2.roll = 0;
                 landing = true;
                 velocity_circle = false;
                 force_control = false;
@@ -963,9 +999,10 @@ int main(int argc, char **argv)
     vir2.roll = vir2.roll - 2*pi;
     else if(vir2.roll<-pi)
     vir2.roll = vir2.roll + 2*pi;
-        ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
+        //ROS_INFO("setpoint: %.2f, %.2f, %.2f, %.2f", vir1.x, vir1.y, vir1.z, vir1.roll/pi*180);
+
     follow(vir1,host_mocap,&vs,0,0);
-    follow_force(vir2,host_mocap2,&vs2,0,0);
+    follow_force(vir2,odom,&vs2,0,0);
 
         //mocap_pos_pub.publish(host_mocap);
         //mocap_pos_pub2.publish(host_mocap2);

@@ -74,7 +74,7 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         Eigen::Vector3d p_v1;
         Eigen::Vector3d beta;
         double omega_value;
-        const double m = 1.25;
+        const double m = 1.85;
         Eigen::Vector3d thrust_test;
         v_k << vx, vy, vz;
         thrust_v << 0, 0, thrust;
@@ -133,6 +133,10 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         //omegax = angular_v_measure(0) - betax;
         //omegay = angular_v_measure(1) - betay;
         //omegaz = angular_v_measure(2) - betaz;
+
+        omegax = omegax - omega_bias(0);
+        omegay = omegay - omega_bias(1);
+        omegaz = omegaz - omega_bias(2);
 
         //omega_v1 << omegax, omegay, omegaz;
         omega_value = omegax*omegax+omegay*omegay+omegaz*omegaz;

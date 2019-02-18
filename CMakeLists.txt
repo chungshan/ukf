@@ -158,6 +158,7 @@ add_executable(estimate_payload_v3 src/estimate_payload_v3.cpp)
 add_executable(control_rc src/control_rc.cpp)
 add_executable(leader_acc src/leader_acc.cpp)
 add_executable(add_random src/add_random.cpp)
+add_executable(plot_something src/plot.cpp)
 add_executable(leader_follower_circle src/leader_follower_circle.cpp ${HEADERS_} ${SOURCES_})
 add_executable(force_estimatee src/force_estimate.cpp ${HEADERS_} ${SOURCES_})
 ## Rename C++ executable without prefix
@@ -232,6 +233,9 @@ target_link_libraries(leader_follower_circle
     ${catkin_LIBRARIES}
 )
 target_link_libraries(add_random
+    ${catkin_LIBRARIES}
+)
+target_link_libraries(plot_something
     ${catkin_LIBRARIES}
 )
 #############

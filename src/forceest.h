@@ -59,6 +59,7 @@ Eigen::Vector3d U;
 Eigen::Vector4d q_m_k;
 Eigen::Vector4d q_k1_0;
 Eigen::Vector4d qk1;
+Eigen::Vector3d omega_bias;
 Eigen::MatrixXd dynamics(Eigen::MatrixXd sigma_state);
 Eigen::MatrixXd state_to_measure(Eigen::MatrixXd sigma_state);
 private:

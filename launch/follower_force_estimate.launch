@@ -8,7 +8,9 @@
      <param name="topic_mag" value="/mavros/imu/mag" />
      <param name="topic_battery" value="/mavros/battery" />
      <param name="topic_vel" value="/mavros/local_position/velocity" />
+     <param name="topic_odom" value="/vins_estimator/odometry" />
      <param name="topic_drone" value="2" />
+     <param name="topic_acc_bias" value="/vins_estimator/acc_bias" />
    </node>
 </group>
 </launch>
