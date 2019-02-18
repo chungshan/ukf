@@ -61,7 +61,7 @@ void battery_cb(const sensor_msgs::BatteryState::ConstPtr &msg){
 nav_msgs::Odometry odom;
 void odom_cb(const nav_msgs::Odometry::ConstPtr &msg){
   odom = *msg;
-  forceest1.quat_m << odom.pose.pose.orientation.x, odom.pose.pose.orientation.y, odom.pose.pose.orientation.z, odom.pose.pose.orientation.w;
+  forceest1.quat_m << drone2_pose.pose.orientation.x, drone2_pose.pose.orientation.y, drone2_pose.pose.orientation.z, drone2_pose.pose.orientation.w;
 }
 geometry_msgs::Point acc_bias;
 void acc_cb(const geometry_msgs::Point::ConstPtr &msg){
@@ -360,10 +360,10 @@ if(drone_flag==2){
     U_y = (sqrt(2)/2)*l*(-F1 - F2 + F3 + F4);
     U_z = k*F1 - k*F2 + k*F3 - k*F4;
     forceest1.U << U_x, U_y, U_z;
-    double x = odom.pose.pose.orientation.x;
-    double y = odom.pose.pose.orientation.y;
-    double z = odom.pose.pose.orientation.z;
-    double w = odom.pose.pose.orientation.w;
+    double x = drone2_pose.pose.orientation.x;
+    double y = drone2_pose.pose.orientation.y;
+    double z = drone2_pose.pose.orientation.z;
+    double w = drone2_pose.pose.orientation.w;
 
     forceest1.R_IB.setZero();
     forceest1.R_IB << w*w+x*x-y*y-z*z  , 2*x*y-2*w*z ,            2*x*z+2*w*y,
@@ -377,14 +377,14 @@ if(drone_flag==2){
     measure.setZero(measurementsize);
 
 
-    measure << odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z,
-               odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.linear.z,
+    measure << drone2_pose.pose.position.x, drone2_pose.pose.position.y, drone2_pose.pose.position.z,
+               drone2_vel.twist.linear.x, drone2_vel.twist.linear.y, drone2_vel.twist.linear.z,
                measure_ex, measure_ey, measure_ez,
                drone2_imu.angular_velocity.x, drone2_imu.angular_velocity.y, drone2_imu.angular_velocity.z;
     forceest1.omega_bias(0) = gyro_bias.x;
     forceest1.omega_bias(1) = gyro_bias.y;
     forceest1.omega_bias(2) = gyro_bias.z;
-    forceest1.quat_m << odom.pose.pose.orientation.x, odom.pose.pose.orientation.y, odom.pose.pose.orientation.z, odom.pose.pose.orientation.w;
+    forceest1.quat_m << drone2_pose.pose.orientation.x, drone2_pose.pose.orientation.y, drone2_pose.pose.orientation.z, drone2_pose.pose.orientation.w;
     forceest1.qk11 = forceest1.qk1;
 /*
     theta_q << forceest1.quaternion(3), -forceest1.quaternion(2), forceest1.quaternion(1),
@@ -480,7 +480,7 @@ if(drone_flag==2){
     angular_v.z = drone2_imu.angular_velocity.z;
 
     angular_v_pub.publish(angular_v);
-    tf::Quaternion quat_transform_ref(odom.pose.pose.orientation.x,odom.pose.pose.orientation.y,odom.pose.pose.orientation.z,odom.pose.pose.orientation.w);
+    tf::Quaternion quat_transform_ref(drone2_pose.pose.orientation.x,drone2_pose.pose.orientation.y,drone2_pose.pose.orientation.z,drone2_pose.pose.orientation.w);
     double roll_ref,pitch_ref,yaw_ref;
     tf::Matrix3x3(quat_transform_ref).getRPY(roll_ref,pitch_ref,yaw_ref);
     euler_ref.x = roll_ref*180/3.1415926;//roll_ref*180/3.1415926
