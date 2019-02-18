@@ -124,7 +124,7 @@ int main(int argc, char **argv)
   ros::Subscriber rc_sub = nh.subscribe<mavros_msgs::RCOut>(topic_thrust, 2, rc_cb);
   ros::Subscriber mag_sub = nh.subscribe<sensor_msgs::MagneticField>(topic_mag, 2, mag_cb);
   ros::Subscriber battery_sub = nh.subscribe<sensor_msgs::BatteryState>(topic_battery, 2, battery_cb);
-  ros::Subscriber odom_sub = nh.subscribe<nav_msgs::Odometry>(topic_odom, 2, odom_cb);
+  //ros::Subscriber odom_sub = nh.subscribe<nav_msgs::Odometry>(topic_odom, 2, odom_cb);
   ros::Subscriber acc_sub = nh.subscribe<geometry_msgs::Point>(topic_acc_bias, 2, acc_cb);
   ros::Subscriber gyro_sub = nh.subscribe<geometry_msgs::Point>(topic_gyro_bias, 2, gyro_cb);
   ros::Publisher euler_pub = nh.advertise<geometry_msgs::Point>("euler", 2);
@@ -243,6 +243,7 @@ int main(int argc, char **argv)
   double sum_Fx,sum_Fy,sum_Fz;
   double avg_Fx,avg_Fy,avg_Fz;
   double bias_Fx,bias_Fy,bias_Fz;
+  double rope_theta_old;
   int force_count = 1;
   while(ros::ok()){
 
@@ -264,7 +265,7 @@ int main(int argc, char **argv)
     Eigen::Vector3d y_k;
     Eigen::Vector3d mag_v;
     double battery_dt;
-    double rope_theta;
+    double rope_theta, rope_omega;
     pose.x = drone2_pose.pose.position.x;
     pose_pub.publish(pose);
 
@@ -495,12 +496,17 @@ if(drone_flag==2){
     */
     force.x = forceest1.x[F_x] - bias_Fx;
     force.y = forceest1.x[F_y] - bias_Fy;
-    force.z = forceest1.x[F_z] - bias_Fz;
+    force.z = forceest1.x[F_z] - bias_Fz - 0.23*9.81;
     rope_theta = atan2(force.z,force.y);
-    rope_theta_v.x = rope_theta;
+    rope_omega = (rope_theta - rope_theta_old)*30;
+    rope_theta_old = rope_theta;
+    rope_theta_v.x = rope_theta*180/3.1415926;
+    rope_theta_v.y = rope_omega;
+    ROS_INFO("rope_theta = %f, rope_omega = %f", rope_theta_v.x, rope_theta_v.y);
     rope_theta_pub.publish(rope_theta_v);
     force_nobias.x = forceest1.x[F_x];
     force_nobias.y = forceest1.x[F_y];
+    force_nobias.z = forceest1.x[F_z];
     torque.z = forceest1.x[tau_z];
     torque_pub.publish(torque);
     force_pub.publish(force);
