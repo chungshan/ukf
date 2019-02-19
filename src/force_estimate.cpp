@@ -245,6 +245,9 @@ int main(int argc, char **argv)
   double bias_Fx,bias_Fy,bias_Fz;
   double rope_theta_old;
   int force_count = 1;
+  int drone3_battery_flag = 0;
+  double drone3_initial_battery;
+  double delta_voltage;
   while(ros::ok()){
 
 
@@ -255,6 +258,8 @@ int main(int argc, char **argv)
         case 112:    // key p, calculate bias
             bias_flag = 1;
             break;
+        case 44: // key < , initial drone3's battery voltage
+            drone3_battery_flag = 1;
         }
     }
     double F1, F2, F3, F4;
@@ -270,6 +275,12 @@ int main(int argc, char **argv)
     pose_pub.publish(pose);
 
     battery_dt = ros::Time::now().toSec() - ini_time;
+    if(drone3_battery_flag == 1){
+      drone3_initial_battery = battery.voltage;
+      drone3_battery_flag == 0;
+
+    }
+    ROS_INFO("delta voltage = %f", drone3_initial_battery - battery.voltage);
     if(battery.voltage !=0 && battery.voltage < 10.3 && battery_flag2 == 0){
 
       battery_flag2 = 1;
@@ -291,12 +302,13 @@ int main(int argc, char **argv)
 
 if(drone_flag==3){
   double b;
-    F1 = (5.6590*1e-4*(pwm3*pwm3) - 0.5995*pwm3 - 84.5178)*9.8/1000; // drone3
-    F2 = (5.6590*1e-4*(pwm1*pwm1) - 0.5995*pwm1 - 84.5178)*9.8/1000; //left_right:127.5178
-    F3 = (5.6590*1e-4*(pwm4*pwm4) - 0.5995*pwm4 - 84.5178)*9.8/1000; //up_down:97.5178
-    F4 = (5.6590*1e-4*(pwm2*pwm2) - 0.5995*pwm2 - 84.5178)*9.8/1000;
+    F1 = (6.10242*1e-4*(pwm3*pwm3) - 0.66391*pwm3 - 51.04519)*9.8/1000; // drone3
+    F2 = (5.912439*1e-4*(pwm1*pwm1) - 0.632553*pwm1 - 75.996)*9.8/1000; //left_right:127.5178
+    F3 = (6.146690*1e-4*(pwm4*pwm4) - 0.70247*pwm4 - 13.9731)*9.8/1000; //up_down:97.5178
+    F4 = (5.412105*1e-4*(pwm2*pwm2) - 0.493*pwm2 - 165.99)*9.8/1000;
   b = -(3.065625*1000/9.8-5.6590*1e-4*(pwm1*pwm1)+0.5995*pwm1);//no payload
   if(battery_flag3 == 1){
+    /*
     pwm1 = pwm1 - (-15*battery.voltage+160);
     pwm2 = pwm2 - (-15*battery.voltage+160);
     pwm3 = pwm3 - (-15*battery.voltage+160);
@@ -305,6 +317,11 @@ if(drone_flag==3){
     F2 = (5.6590*1e-4*(pwm1*pwm1) - 0.5995*pwm1 - 80.5178-25*(1-exp(-1.08*(10.6-battery.voltage))))*9.8/1000; //left_right:127.5178
     F3 = (5.6590*1e-4*(pwm4*pwm4) - 0.5995*pwm4 - 80.5178-25*(1-exp(-1.08*(10.6-battery.voltage))))*9.8/1000; //up_down:97.5178
     F4 = (5.6590*1e-4*(pwm2*pwm2) - 0.5995*pwm2 - 80.5178-25*(1-exp(-1.08*(10.6-battery.voltage))))*9.8/1000;
+    */
+    F1 = (6.710368072689550*1e-4*(pwm3*pwm3)-0.89733*pwm3 + 131.7261)*9.8/1000; // drone3
+    F2 = (5.482678*1e-4*(pwm1*pwm1) - 0.534949*pwm1 -133.961)*9.8/1000; //left_right:127.5178
+    F3 = (5.16589*1e-4*(pwm4*pwm4) - 0.48275*pwm4 - 148.5)*9.8/1000; //up_down:97.5178
+    F4 = (6.64161*1e-4*(pwm2*pwm2) - 0.89101*pwm2 + 132.7442)*9.8/1000;
   }
   std::cout << "---b---" << std::endl;
   std::cout << b << std::endl;
