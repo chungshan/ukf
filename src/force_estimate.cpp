@@ -323,9 +323,10 @@ if(drone_flag==3){
     F3 = (5.16589*1e-4*(pwm4*pwm4) - 0.48275*pwm4 - 148.5)*9.8/1000; //up_down:97.5178
     F4 = (6.64161*1e-4*(pwm2*pwm2) - 0.89101*pwm2 + 132.7442)*9.8/1000;
   }
+  /*
   std::cout << "---b---" << std::endl;
   std::cout << b << std::endl;
-
+*/
 }
 if(drone_flag==2){
   double a;
@@ -359,9 +360,10 @@ if(drone_flag==2){
 
     a = 3.065625*1000/9.8-8.1733*1e-4*(pwm1*pwm1)+1.2950*pwm1;//no payload
     battery_pub.publish(battery_p);
+    /*
     std::cout << "---a---" << std::endl;
     std::cout << a << std::endl;
-
+*/
 }
     forceest1.thrust = F1 + F2 + F3 + F4;
     pwm.x = pwm1+pwm2+pwm3+pwm4;
@@ -371,9 +373,11 @@ if(drone_flag==2){
     pwm.z = pwm3;
 
     pwm_pub.publish(pwm);
+    /*
     std::cout << "----------thrust-------" << std::endl;
     std::cout << forceest1.thrust << std::endl;
-
+*/
+    ROS_INFO("Thrust = %f", forceest1.thrust);
     U_x = (sqrt(2)/2)*l*(F1 - F2 - F3 + F4);
     U_y = (sqrt(2)/2)*l*(-F1 - F2 + F3 + F4);
     U_z = k*F1 - k*F2 + k*F3 - k*F4;
@@ -445,12 +449,13 @@ if(drone_flag==2){
     std::cout << forceest1.x[omega_y] << std::endl;
     std::cout << forceest1.x[omega_z] << std::endl;
 */
-
+/*
     std::cout << "---Force---" << std::endl;
     std::cout << forceest1.x[F_x] << std::endl;
     std::cout << forceest1.x[F_y] << std::endl;
     std::cout << forceest1.x[F_z] << std::endl;
     std::cout << forceest1.x[tau_z] << std::endl;
+    */
 /*
     std::cout << "---angular velocity bias---" << std::endl;
     std::cout << forceest1.x[beta_x] << std::endl;
@@ -484,8 +489,8 @@ if(drone_flag==2){
 
       }
     }
-    ROS_INFO("Fx = %f, Fy = %f", forceest1.x[F_x], forceest1.x[F_y]);
-    ROS_INFO("bias_Fx = %f, bias_Fy = %f", bias_Fx, bias_Fy);
+    ROS_INFO("Fx = %f, Fy = %f, Fz = %f", forceest1.x[F_x], forceest1.x[F_y], forceest1.x[F_z]);
+    ROS_INFO("bias_Fx = %f, bias_Fy = %f, bias_Fz = %f", bias_Fx, bias_Fy, bias_Fz);
     bias_pub.publish(bias);
 
     euler.x = forceest1.euler_angle(0);//roll:forceest1.euler_angle(0)
@@ -513,7 +518,7 @@ if(drone_flag==2){
     */
     force.x = forceest1.x[F_x] - bias_Fx;
     force.y = forceest1.x[F_y] - bias_Fy;
-    force.z = forceest1.x[F_z] - bias_Fz - 0.23*9.81;
+    force.z = forceest1.x[F_z] - bias_Fz;
     rope_theta = atan2(force.z,force.y);
     rope_omega = (rope_theta - rope_theta_old)*30;
     rope_theta_old = rope_theta;
