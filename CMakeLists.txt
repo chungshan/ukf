@@ -159,8 +159,14 @@ add_executable(control_rc src/control_rc.cpp)
 add_executable(leader_acc src/leader_acc.cpp)
 add_executable(add_random src/add_random.cpp)
 add_executable(plot_something src/plot.cpp)
+add_executable(jumping_rope src/jumping_rope.cpp)
+add_executable(offb src/offb.cpp)
+add_executable(sim_jumping_rope src/sim_jumping_rope.cpp)
+add_executable(apply_wrench src/apply_wrench.cpp)
+
 add_executable(leader_follower_circle src/leader_follower_circle.cpp ${HEADERS_} ${SOURCES_})
 add_executable(force_estimatee src/force_estimate.cpp ${HEADERS_} ${SOURCES_})
+add_executable(sim_force_estimatee src/sim_force_estimate.cpp ${HEADERS_} ${SOURCES_})
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -178,6 +184,9 @@ add_executable(force_estimatee src/force_estimate.cpp ${HEADERS_} ${SOURCES_})
  target_link_libraries(ukf_estimate
    ${catkin_LIBRARIES}
  )
+target_link_libraries(sim_jumping_rope
+  ${catkin_LIBRARIES}
+)
 #target_link_libraries(payload
 #  ${catkin_LIBRARIES}
 #)
@@ -226,6 +235,9 @@ target_link_libraries(control_rc
 target_link_libraries(force_estimatee
     ${catkin_LIBRARIES}
 )
+target_link_libraries(sim_force_estimatee
+    ${catkin_LIBRARIES}
+)
 target_link_libraries(leader_acc
     ${catkin_LIBRARIES}
 )
@@ -236,6 +248,15 @@ target_link_libraries(add_random
     ${catkin_LIBRARIES}
 )
 target_link_libraries(plot_something
+    ${catkin_LIBRARIES}
+)
+target_link_libraries(jumping_rope
+    ${catkin_LIBRARIES}
+)
+target_link_libraries(offb
+    ${catkin_LIBRARIES}
+)
+target_link_libraries(apply_wrench
     ${catkin_LIBRARIES}
 )
 #############

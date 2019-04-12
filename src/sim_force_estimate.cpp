@@ -16,16 +16,20 @@
 #include "sensor_msgs/BatteryState.h"
 #include "nav_msgs/Odometry.h"
 #include <string>
+#include <gazebo_msgs/ModelStates.h>
 #include <cstdio>
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
+#include <iostream>
+#include <iterator>
+#include <random>
 #define l 0.25
 #define k 0.02
 int drone_flag;
 int bias_flag;
 forceest forceest1(statesize,measurementsize);
-geometry_msgs::Point euler, euler_ref, force, torque, bias, angular_v,pwm,battery_p,pose,thrust, force_nobias, rope_theta_v;
+geometry_msgs::Point euler, euler_ref, force, torque, bias, angular_v,pwm,battery_p,pose,thrust, force_nobias, rope_theta_v, drone_vel;
 sensor_msgs::Imu drone2_imu;
 void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
   drone2_imu = *msg;
@@ -72,6 +76,21 @@ void gyro_cb(const geometry_msgs::Point::ConstPtr &msg){
   gyro_bias = *msg;
 }
 
+gazebo_msgs::ModelStates model_states;
+Eigen::Vector3d iris_1_vel;
+void model_state_cb(const gazebo_msgs::ModelStates::ConstPtr& msg){
+model_states = *msg;
+if(model_states.name.size()>0){
+    for(unsigned int i=0; i<model_states.name.size();i++){
+        if(model_states.name[i].compare("iris_rplidar")==0){
+           iris_1_vel <<model_states.twist[i].linear.x,
+                        model_states.twist[i].linear.y,
+                        model_states.twist[i].linear.z;
+
+        }
+}
+}
+}
 char getch()
 {
     int flags = fcntl(0, F_GETFL, 0);
@@ -101,7 +120,7 @@ char getch()
 }
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "force_estimate");
+  ros::init(argc, argv, "sim_force_estimate");
   ros::NodeHandle nh;
 
   std::string topic_imu, topic_mocap, topic_thrust, topic_vel, topic_mag, topic_raw,topic_battery,topic_odom, topic_acc_bias, topic_gyro_bias;
@@ -141,6 +160,9 @@ int main(int argc, char **argv)
   ros::Publisher ttt_pub = nh.advertise<geometry_msgs::Point>("ttt", 2);
   ros::Publisher qqq_pub = nh.advertise<geometry_msgs::Point>("qqq", 2);
   ros::Publisher rope_theta_pub = nh.advertise<geometry_msgs::Point>("rope_theta", 2);
+  ros::Publisher drone_vel_pub = nh.advertise<geometry_msgs::Point>("drone_vel", 2);
+  ros::Subscriber model_state_sub = nh.subscribe<gazebo_msgs::ModelStates>
+          ("/gazebo/model_states", 3, model_state_cb);
   ros::Rate loop_rate(30);
 
 
@@ -189,7 +211,7 @@ int main(int argc, char **argv)
   pnoise(omega_x,omega_x) = 1e-2;
   pnoise(omega_y,omega_y) = 1e-2;
   pnoise(omega_z,omega_z) = 1e-2;
-
+//larger convergence rate faster
   pnoise(F_x,F_x) = 1.5;
   pnoise(F_y,F_y) = 1.5;
   pnoise(F_z,F_z) = 1.5;
@@ -238,7 +260,7 @@ int main(int argc, char **argv)
   forceest1.set_measurement_matrix(measurement_matrix);
   int battery_flag2, battery_flag3;
   double start_time,ini_time;
-  double m = 1.28;
+  double m = 1.5;
   ini_time = ros::Time::now().toSec();
   double sum_Fx;
   double sum_Fz_7;
@@ -252,6 +274,14 @@ int main(int argc, char **argv)
   int drone3_battery_flag = 0;
   double drone3_initial_battery;
   double delta_voltage;
+  //gausian noise
+  const double mean = 0.0;
+  const double stddev = 0.1;
+  std::default_random_engine generatorx,generatory,generatorz;
+  std::normal_distribution<double> distx(mean,stddev);
+  std::normal_distribution<double> disty(mean,stddev);
+  std::normal_distribution<double> distz(mean,stddev);
+
   while(ros::ok()){
 
 
@@ -338,6 +368,7 @@ if(drone_flag==3){
     F4 = (6.64161*1e-4*(pwm2*pwm2) - 0.89101*pwm2 + 132.7442)*9.8/1000;
   }
   battery_p.x = F1+F2+F3+F4;
+
   /*
   std::cout << "---b---" << std::endl;
   std::cout << b << std::endl;
@@ -345,23 +376,30 @@ if(drone_flag==3){
 }
 if(drone_flag==2){
   double a;
+
+    F1 = (8.1733*1e-4*(pwm3*pwm3) - 1.2950*pwm3 + 397)*9.8/1000; //drone2
+    F2 = (8.1733*1e-4*(pwm1*pwm1) - 1.2950*pwm1 + 397)*9.8/1000; //left_right:265.7775
+    F3 = (8.1733*1e-4*(pwm4*pwm4) - 1.2950*pwm4 + 397)*9.8/1000; //up_down:265.7775
+    F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 397)*9.8/1000;
+
   /*
-    F1 = (8.1733*1e-4*(pwm3*pwm3) - 1.2950*pwm3 + 265.7775)*9.8/1000; //drone2
-    F2 = (8.1733*1e-4*(pwm1*pwm1) - 1.2950*pwm1 + 265.7775)*9.8/1000; //left_right:265.7775
-    F3 = (8.1733*1e-4*(pwm4*pwm4) - 1.2950*pwm4 + 265.7775)*9.8/1000; //up_down:265.7775
-    F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 265.7775)*9.8/1000;
-    */
   F1 = (8.0274*1e-4*(pwm3*pwm3) - 1.441*pwm3 +  587.9219)*9.8/1000; //drone2
   F2 = (5.167*1e-4*(pwm1*pwm1)  - 0.5049*pwm1 - 106.083)*9.8/1000; //left_right:265.7775
   F3 = (9.74659*1e-4*(pwm4*pwm4) -1.90901*pwm4 + 915.60244)*9.8/1000; //up_down:265.7775
   F4 = (6.04312*1e-4*(pwm2*pwm2) -0.767787*pwm2 + 78.7524)*9.8/1000;
-
+*/
     battery_p.x = F1+F2+F3+F4;
+    Eigen::Vector3d thrust_ve;
+    Eigen::Vector3d thrust_vec;
+    thrust_ve << 0,0, battery_p.x;
+    thrust_vec = forceest1.R_IB * thrust_ve;
+    battery_p.z = thrust_vec(2);
+    battery_p.y = thrust_vec(0);
     thrust.x = F2;
     thrust.y = F3;
     thrust.z = F4;
     thrust_pub.publish(thrust);
-
+/*
     if(battery_flag2 == 1){
 
       F1 = (4.64711*1e-4*(pwm3*pwm3) -0.3953*pwm3 - 177.7)*9.8/1000; //drone2
@@ -372,7 +410,7 @@ if(drone_flag==2){
 
       battery_p.y = F1 + F2 + F3+ F4;
     }
-
+*/
     a = 3.065625*1000/9.8-8.1733*1e-4*(pwm1*pwm1)+1.2950*pwm1;//no payload
     battery_pub.publish(battery_p);
     /*
@@ -381,6 +419,7 @@ if(drone_flag==2){
 */
 }
     forceest1.thrust = F1 + F2 + F3 + F4;
+    //forceest1.thrust = (F1 + F2 + F3 + F4)*1.5;
     pwm.x = pwm1+pwm2+pwm3+pwm4;
     sum_pwm =sum_pwm + pwm1+pwm2+pwm3+pwm4;
     pwm.y = sum_pwm / count;
@@ -397,6 +436,12 @@ if(drone_flag==2){
     U_y = (sqrt(2)/2)*l*(-F1 - F2 + F3 + F4);
     U_z = k*F1 - k*F2 + k*F3 - k*F4;
     forceest1.U << U_x, U_y, U_z;
+
+    //gausian noise
+    forceest1.gausian_noise << distx(generatorx), disty(generatory), distz(generatorz);
+
+    std::cout << "----------Gausian noise------------" << std::endl;
+    std::cout << forceest1.gausian_noise << std::endl;
     double x = drone2_pose.pose.orientation.x;
     double y = drone2_pose.pose.orientation.y;
     double z = drone2_pose.pose.orientation.z;
@@ -414,8 +459,15 @@ if(drone_flag==2){
     measure.setZero(measurementsize);
 
 
+    drone_vel.x = drone2_pose.pose.position.x;
+    drone_vel.y = drone2_vel.twist.linear.y;
+    drone_vel.z = drone2_vel.twist.linear.z;
+
+    drone_vel_pub.publish(drone_vel);
+
+
     measure << drone2_pose.pose.position.x, drone2_pose.pose.position.y, drone2_pose.pose.position.z,
-               drone2_vel.twist.linear.x, drone2_vel.twist.linear.y, drone2_vel.twist.linear.z,
+               drone2_vel.twist.linear.x, drone2_vel.twist.linear.y, -drone2_vel.twist.linear.z,
                measure_ex, measure_ey, measure_ez,
                drone2_imu.angular_velocity.x, drone2_imu.angular_velocity.y, drone2_imu.angular_velocity.z;
     forceest1.omega_bias(0) = gyro_bias.x;
@@ -501,7 +553,7 @@ if(drone_flag==2){
         bias_Fz_7 = 0;
         bias_Fx = avg_Fx;
         bias_Fy_1 = avg_Fy_1;
-        bias_Fz_7 = avg_Fz_7 + 0.1*9.81;
+        bias_Fz_7 = avg_Fz_7 + 0.8*9.81;
         bias_flag = 0;
 
       }
@@ -550,6 +602,7 @@ if(drone_flag==2){
     rope_theta_pub.publish(rope_theta_v);
     force_nobias.x = forceest1.x[F_x];
     force_nobias.y = forceest1.x[F_y];
+
     force_nobias.z = forceest1.x[F_z];
     torque.z = forceest1.x[tau_z];
     torque_pub.publish(torque);

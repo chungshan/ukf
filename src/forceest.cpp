@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+
 Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
 
     Eigen::MatrixXd predict_sigma_state(this->x_size,this->x_sigmavector_size);
@@ -73,8 +74,9 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         Eigen::Vector3d p_v;
         Eigen::Vector3d p_v1;
         Eigen::Vector3d beta;
+        Eigen::Matrix3d k_drag;
         double omega_value;
-        const double m = 1.25;
+        const double m = 1.5;
         Eigen::Vector3d thrust_test;
         v_k << vx, vy, vz;
         thrust_v << 0, 0, thrust;
@@ -85,6 +87,9 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
              0, 0, 0.12656;
         omega_v << omegax, omegay, omegaz;
         torque_v << 0, 0, tauz;
+        k_drag << 0.0, 0, 0,
+                  0, 0.0, 0,
+                  0, 0, 0.0;
         //beta << betax, betay, betaz;
         //USQUE
         delta_p << ex, ey, ez;
@@ -210,7 +215,7 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
 
 
 
-        v_k1 = v_k + delta_t * ((R_IB*(thrust_v))/m - gravity + F_v/m);
+        v_k1 = v_k + delta_t * ((R_IB*(thrust_v))/m - gravity + F_v/m - (k_drag * v_k)/m);
 
         //rotation
 
@@ -219,17 +224,19 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         //
 
 
-
+        double Ts = 0.033;
+        double tau_bar = 0.2;
 
 
 
         predict_sigma_state(p_x,i) = p_v1(0);
         predict_sigma_state(p_y,i) = p_v1(1);
         predict_sigma_state(p_z,i) = p_v1(2);
-
-        predict_sigma_state(F_x,i) = Fx;
-        predict_sigma_state(F_y,i) = Fy;
-        predict_sigma_state(F_z,i) = Fz;
+//*(1-Ts/tau_bar)
+        // + gausian_noise(0)
+        predict_sigma_state(F_x,i) = Fx+ gausian_noise(0);
+        predict_sigma_state(F_y,i) = Fy+ gausian_noise(1);
+        predict_sigma_state(F_z,i) = Fz+ gausian_noise(2);
         predict_sigma_state(tau_z,i) = tauz;
 
         predict_sigma_state(v_x,i) = v_k1(0);

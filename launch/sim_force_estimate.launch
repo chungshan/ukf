@@ -1,0 +1,14 @@
+<launch>
+<group ns = "leader_ukf">
+   <node pkg="UKF" name="ukf" type="sim_force_estimatee" output="screen" >
+     <param name="topic_imu" value="/mavros/imu/data" />
+     <param name="topic_raw" value="/mavros/imu/data_raw" />
+     <param name="topic_mocap" value="/mavros/local_position/pose" />
+     <param name="topic_thrust" value="/mavros/rc/out" />
+     <param name="topic_mag" value="/mavros/imu/mag" />
+     <param name="topic_battery" value="/mavros/battery" />
+     <param name="topic_vel" value="/mavros/local_position/velocity_local" />
+     <param name="topic_drone" value="2" />
+   </node>
+</group>
+</launch>

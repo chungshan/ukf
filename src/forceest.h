@@ -55,6 +55,7 @@ forceest(int x, int y) : ukf(x,y){
 double thrust;
 Eigen::Matrix3d R_IB;
 Eigen::Vector3d U;
+Eigen::Vector3d gausian_noise;
 //Eigen::Vector4d q_k;
 Eigen::Vector4d q_m_k;
 Eigen::Vector4d q_k1_0;
