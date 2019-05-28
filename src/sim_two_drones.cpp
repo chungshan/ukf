@@ -16,7 +16,7 @@
 #include <geometry_msgs/WrenchStamped.h>
 #include <sensor_msgs/Imu.h>
 #include "lpf2.h"
-geometry_msgs::Point uav1_force_est, uav2_force_est, uav1_rope_angle, uav2_rope_angle, uav2_theta_hat, uav2_psi_hat, uav2_E_dot_hat_theta,uav1_E_dot_hat_theta, uav1_control_input,uav2_control_input, uav1_theta;
+geometry_msgs::Point uav1_theta_hat_1_p,uav1_theta_hat_1_meas_p,uav1_force_est, uav2_force_est, uav1_rope_angle, uav2_rope_angle, uav2_theta_hat,uav2_theta_hat_meas, uav2_psi_hat, uav2_psi_hat_meas,uav2_E_dot_hat_theta,uav1_E_dot_hat_theta, uav1_control_input,uav2_control_input, uav1_theta;
 lpf2 lpf2_E_hat_dot(10,0.0333);
 lpf2 lpf2_E_f_dot(10,0.0333);
 lpf2 lpf2_E_hat_dot_psi(10,0.0333);
@@ -669,6 +669,7 @@ if(jumping_rope_control == true){
 }
 //non-linear observer
 Eigen::Vector2d uav2_theta_hat_1, uav1_theta_hat_1;
+Eigen::Vector2d uav2_theta_hat_1_meas, uav1_theta_hat_1_meas, uav2_theta_hat_psi_meas;
 Eigen::Vector2d uav2_theta_hat_psi, uav2_theta_hat_psi_last;
 double uav2_theta_psi_dot, uav2_theta_psi_l;
 
@@ -753,13 +754,18 @@ int main(int argc, char **argv)
   ros::Subscriber uav1_wrench_sub = nh.subscribe<geometry_msgs::WrenchStamped>("/uav1_ft_sensor", 2, uav1_wrench_cb);
   ros::Subscriber uav2_wrench_sub = nh.subscribe<geometry_msgs::WrenchStamped>("/uav2_ft_sensor", 2, uav2_wrench_cb);
   ros::Publisher uav2_theta_hat_pub = nh.advertise<geometry_msgs::Point>("/uav2_theta_hat", 2);
+  ros::Publisher uav2_theta_hat_meas_pub = nh.advertise<geometry_msgs::Point>("/uav2_theta_hat_meas", 2);
   ros::Publisher uav2_psi_hat_pub = nh.advertise<geometry_msgs::Point>("/uav2_psi_hat", 2);
+  ros::Publisher uav2_psi_hat_meas_pub = nh.advertise<geometry_msgs::Point>("/uav2_psi_hat_meas", 2);
+
   ros::Publisher uav2_E_dot_hat_theta_pub = nh.advertise<geometry_msgs::Point>("/uav2_E_dot_hat_theta", 2);
   ros::Publisher uav2_control_input_pub = nh.advertise<geometry_msgs::Point>("/uav2_control_input", 2);
   ros::Publisher uav1_E_dot_hat_theta_pub = nh.advertise<geometry_msgs::Point>("/uav1_E_dot_hat_theta", 2);
   ros::Subscriber uav2_imu_sub = nh.subscribe<sensor_msgs::Imu>("/uav2/mavros/imu/data",2,uav2_imu_cb);
   ros::Subscriber uav1_imu_sub = nh.subscribe<sensor_msgs::Imu>("/uav1/mavros/imu/data",2,uav1_imu_cb);
   ros::Publisher uav1_theta_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta", 2);
+  ros::Publisher uav1_theta_hat_1_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta_hat_1", 2);
+  ros::Publisher uav1_theta_hat_1_meas_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta_hat_1_meas", 2);
   ros::Rate rate(30);
 
   while (ros::ok() && uav1_current_state.connected && uav2_current_state.connected) {
@@ -997,32 +1003,52 @@ int main(int argc, char **argv)
 
 //   uav2_theta_psi_dot = (uav2_theta_hat_psi(0) - uav2_theta_psi_l)/0.03333;
 //   uav2_theta_psi_l = uav2_theta_hat_psi(0);
-
-   double psi_meas;
-   //psi_meas = ((-(uav2_rope_theta_sensor+pi)) - (-(uav2_theta_hat_1(0)+pi)));
+    //psi
+   double psi_meas, psi_meas_meas;
+   psi_meas_meas = ((-(uav2_rope_theta_sensor+pi)) - (-(uav2_theta_hat_1(0)+pi)));
    psi_meas = uav2_rope_theta - uav2_theta_hat_1(0);
    //ROS_INFO("psi_meas = %f", psi_meas);
    psi_meas = psi_meas;
- uav2_theta_hat_psi(0) = -uav2_theta_hat_psi(0);
- uav2_theta_hat_psi = non_linear_observer(uav2_theta_hat_psi, psi_meas);
+   uav2_theta_hat_psi(0) = -uav2_theta_hat_psi(0);
+   uav2_theta_hat_psi_meas(0) = -uav2_theta_hat_psi_meas(0);
+   uav2_theta_hat_psi = non_linear_observer(uav2_theta_hat_psi, psi_meas);
+   uav2_theta_hat_psi_meas = non_linear_observer(uav2_theta_hat_psi_meas, psi_meas_meas);
+
+    //theta
    uav2_theta_hat_1 = non_linear_observer(uav2_theta_hat_1,uav2_rope_theta);
+   uav2_theta_hat_1_meas = non_linear_observer(uav2_theta_hat_1_meas,uav2_rope_theta_sensor);
 
    //ROS_INFO("y = %f, x_hat = %f", y, x(0));
 
    //uav1
    uav1_theta_hat_1 = non_linear_observer(uav1_theta_hat_1,uav1_rope_theta);
+   uav1_theta_hat_1_meas = non_linear_observer(uav1_theta_hat_1_meas,uav1_rope_theta_sensor);
+
+
+   uav1_theta_hat_1_p.x = -(uav1_theta_hat_1(0)+pi);
+   uav1_theta_hat_1_p.y = -uav1_theta_hat_1(1);
+   uav1_theta_hat_1_meas_p.x = -(uav1_theta_hat_1_meas(0)+pi);
+   uav1_theta_hat_1_meas_p.y = -uav1_theta_hat_1_meas(1);
 
    uav2_theta_hat.x = -(uav2_theta_hat_1(0) + pi);
    uav2_theta_hat.y = -uav2_theta_hat_1(1);
+   uav2_theta_hat_meas.x = -(uav2_theta_hat_1_meas(0) + pi);
+   uav2_theta_hat_meas.y = -uav2_theta_hat_1_meas(1);
    uav2_psi_hat.x =  -(uav2_theta_hat_psi(0));
    uav2_psi_hat.y = - uav2_theta_hat_psi(1);
+   uav2_psi_hat_meas.x =  -(uav2_theta_hat_psi_meas(0));
+   uav2_psi_hat_meas.y = - uav2_theta_hat_psi_meas(1);
    ROS_INFO("uav2_psi_hat_dot = %f", uav2_theta_hat_psi(1));
    double psi_filt;
    psi_filt = lpf2_psi_dot.filter(uav2_theta_psi_dot);
    //uav2_psi_hat.z =psi_filt;
+   uav1_theta_hat_1_pub.publish(uav1_theta_hat_1_p);
+   uav1_theta_hat_1_meas_pub.publish(uav1_theta_hat_1_meas_p);
    uav1_theta_pub.publish(uav1_theta);
    uav2_theta_hat_pub.publish(uav2_theta_hat);
+   uav2_theta_hat_meas_pub.publish(uav2_theta_hat_meas);
    uav2_psi_hat_pub.publish(uav2_psi_hat);
+   uav2_psi_hat_meas_pub.publish(uav2_psi_hat_meas);
    uav1_rope_angle_pub.publish(uav1_rope_angle);
    uav2_rope_angle_pub.publish(uav2_rope_angle);
    uav2_control_input_pub.publish(uav2_control_input);
