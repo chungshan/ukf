@@ -24,6 +24,7 @@
 #include <iostream>
 #include <iterator>
 #include <random>
+
 #define l 0.25
 #define k 0.02
 int drone_flag;
@@ -159,7 +160,7 @@ int main(int argc, char **argv)
   ros::Publisher force_nobias_pub = nh.advertise<geometry_msgs::Point>("force_nobias", 2);
   ros::Publisher ttt_pub = nh.advertise<geometry_msgs::Point>("ttt", 2);
   ros::Publisher qqq_pub = nh.advertise<geometry_msgs::Point>("qqq", 2);
-  ros::Publisher rope_theta_pub = nh.advertise<geometry_msgs::Point>("rope_theta", 2);
+  //ros::Publisher rope_theta_pub = nh.advertise<geometry_msgs::Point>("rope_theta", 2);
   ros::Publisher drone_vel_pub = nh.advertise<geometry_msgs::Point>("drone_vel", 2);
   ros::Subscriber model_state_sub = nh.subscribe<gazebo_msgs::ModelStates>
           ("/gazebo/model_states", 3, model_state_cb);
@@ -553,7 +554,7 @@ if(drone_flag==2){
         bias_Fz_7 = 0;
         bias_Fx = avg_Fx;
         bias_Fy_1 = avg_Fy_1;
-        bias_Fz_7 = avg_Fz_7 + 0.8*9.81;
+        bias_Fz_7 = avg_Fz_7 + 0.1*9.81;
         bias_flag = 0;
 
       }
@@ -599,7 +600,7 @@ if(drone_flag==2){
     ROS_INFO("------------------- Rope -----------------");
     ROS_INFO("rope_theta = %f, rope_omega = %f", rope_theta_v.x, rope_theta_v.y);
     ROS_INFO("-------------------------------------------");
-    rope_theta_pub.publish(rope_theta_v);
+    //rope_theta_pub.publish(rope_theta_v);
     force_nobias.x = forceest1.x[F_x];
     force_nobias.y = forceest1.x[F_y];
 

@@ -34,12 +34,12 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "printkeyboard");
   ros::NodeHandle nh;
-  ros::Rate rate(1);
+  ros::Rate rate(10);
   while(ros::ok()){
   int c = getch();
   ROS_INFO("C: %d",c);
-  ros::spinOnce();
+  ros::spinOnce();//
   rate.sleep();
   }
-
+return 0;
 }

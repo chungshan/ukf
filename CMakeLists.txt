@@ -8,9 +8,12 @@ project(UKF)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  diagnostic_msgs diagnostic_updater eigen_conversions geographic_msgs geometry_msgs message_filters message_generation nav_msgs roscpp roslint sensor_msgs std_msgs std_srvs tf2 tf2_geometry_msgs tf2_ros xmlrpcpp
+  diagnostic_msgs diagnostic_updater eigen_conversions geographic_msgs geometry_msgs message_filters message_generation nav_msgs roscpp roslint sensor_msgs std_msgs std_srvs tf2 tf2_geometry_msgs tf2_ros xmlrpcpp gazebo_ros
 )
 find_package(Ceres REQUIRED)
+find_package(gazebo REQUIRED)
+
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -72,7 +75,7 @@ find_package(Ceres REQUIRED)
    std_msgs
    geometry_msgs# Or other packages containing msgs
  )
-catkin_package(CATKIN_DEPENDS message_runtime)
+catkin_package(CATKIN_DEPENDS message_runtime )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -113,7 +116,8 @@ catkin_package(
 ###########
 ## Build ##
 ###########
-
+link_directories(${GAZEBO_LIBRARY_DIRS})
+include_directories(${Boost_INCLUDE_DIR} ${GAZEBO_INCLUDE_DIRS})
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
@@ -126,10 +130,11 @@ include_directories(${CERES_INCLUDE_DIRS})
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/UKF.cpp
 # )
+add_library(world_plugin src/world_plugin.cpp)
 #set(HEADERS_   src/lpf.h)
 #set(SOURCES_   src/lpf.cpp)
-set(HEADERS_   src/lpf2.h   src/forceest.h src/ukf.h)
-set(SOURCES_   src/lpf2.cpp     src/forceest.cpp src/ukf.cpp)
+set(HEADERS_   src/lpf.h src/lpf2.h  src/forceest.h src/ukf.h)
+set(SOURCES_   src/lpf.cpp src/lpf2.cpp  src/forceest.cpp src/ukf.cpp)
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -140,20 +145,20 @@ set(SOURCES_   src/lpf2.cpp     src/forceest.cpp src/ukf.cpp)
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/UKF_node.cpp)
 
-add_executable(ukf_estimate src/ukf_estimate.cpp ${HEADERS_} ${SOURCES_})
+#add_executable(ukf_estimate src/ukf_estimate.cpp ${HEADERS_} ${SOURCES_})
 #add_executable(payload src/payload.cpp)
 #add_executable(localization src/localization.cpp)
 add_executable(leaderr src/leader.cpp ${HEADERS_} ${SOURCES_})
 add_executable(followerr src/follower.cpp ${HEADERS_} ${SOURCES_})
-#add_executable(printkeyboard src/printkeyboard.cpp)
-add_executable(leaderfollower src/leader_follower.cpp ${HEADERS_} ${SOURCES_})
-add_executable(plotforce src/plotforce.cpp ${HEADERS_} ${SOURCES_})
+add_executable(printkeyboard src/printkeyboard.cpp)
+#add_executable(leaderfollower src/leader_follower.cpp ${HEADERS_} ${SOURCES_})
+#add_executable(plotforce src/plotforce.cpp ${HEADERS_} ${SOURCES_})
 add_executable(formation_three_interaction src/formation_three_interaction.cpp)
 add_executable(formation_two_interaction src/formation_two_interaction.cpp)
-add_executable(estimate_payload src/estimate_payload.cpp)
+#add_executable(estimate_payload src/estimate_payload.cpp)
 add_executable(estimate_payload_v2 src/estimate_payload_v2.cpp ${HEADERS_} ${SOURCES_})
 add_executable(light src/light.cpp)
-add_executable(leader_follower_force src/leader_follower_force.cpp ${HEADERS_} ${SOURCES_})
+#add_executable(leader_follower_force src/leader_follower_force.cpp ${HEADERS_} ${SOURCES_})
 add_executable(estimate_payload_v3 src/estimate_payload_v3.cpp)
 add_executable(control_rc src/control_rc.cpp)
 add_executable(leader_acc src/leader_acc.cpp)
@@ -161,10 +166,12 @@ add_executable(add_random src/add_random.cpp)
 add_executable(plot_something src/plot.cpp)
 add_executable(jumping_rope src/jumping_rope.cpp)
 add_executable(offb src/offb.cpp)
-add_executable(sim_jumping_rope src/sim_jumping_rope.cpp)
+add_executable(sim_jumping_rope src/sim_jumping_rope.cpp ${HEADERS_} ${SOURCES_})
 add_executable(apply_wrench src/apply_wrench.cpp)
+add_executable(test_vv src/test_vv.cpp)
+add_executable(sim_two_drones src/sim_two_drones.cpp ${HEADERS_} ${SOURCES_})
 
-add_executable(leader_follower_circle src/leader_follower_circle.cpp ${HEADERS_} ${SOURCES_})
+#add_executable(leader_follower_circle src/leader_follower_circle.cpp ${HEADERS_} ${SOURCES_})
 add_executable(force_estimatee src/force_estimate.cpp ${HEADERS_} ${SOURCES_})
 add_executable(sim_force_estimatee src/sim_force_estimate.cpp ${HEADERS_} ${SOURCES_})
 ## Rename C++ executable without prefix
@@ -181,9 +188,9 @@ add_executable(sim_force_estimatee src/sim_force_estimate.cpp ${HEADERS_} ${SOUR
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
- target_link_libraries(ukf_estimate
-   ${catkin_LIBRARIES}
- )
+# target_link_libraries(ukf_estimate
+#   ${catkin_LIBRARIES}
+# )
 target_link_libraries(sim_jumping_rope
   ${catkin_LIBRARIES}
 )
@@ -199,33 +206,33 @@ target_link_libraries(leaderr
 target_link_libraries(followerr
   ${catkin_LIBRARIES}
 )
-#target_link_libraries(printkeyboard
+target_link_libraries(printkeyboard
+  ${catkin_LIBRARIES}
+)
+#target_link_libraries(leaderfollower
 #  ${catkin_LIBRARIES}
 #)
-target_link_libraries(leaderfollower
-  ${catkin_LIBRARIES}
-)
-target_link_libraries(plotforce
-  ${catkin_LIBRARIES}
-)
+#target_link_libraries(plotforce
+#  ${catkin_LIBRARIES}
+#)
 target_link_libraries(formation_three_interaction
   ${catkin_LIBRARIES}
 )
 target_link_libraries(formation_two_interaction
   ${catkin_LIBRARIES}
 )
-target_link_libraries(estimate_payload
-  ${catkin_LIBRARIES} ${CERES_LIBRARIES}
-)
+#target_link_libraries(estimate_payload
+#  ${catkin_LIBRARIES} ${CERES_LIBRARIES}
+#)
 target_link_libraries(estimate_payload_v2
   ${catkin_LIBRARIES}
 )
 target_link_libraries(light
   ${catkin_LIBRARIES}
 )
-target_link_libraries(leader_follower_force
-  ${catkin_LIBRARIES}
-)
+#target_link_libraries(leader_follower_force
+#  ${catkin_LIBRARIES}
+#)
 target_link_libraries(estimate_payload_v3
   ${catkin_LIBRARIES}
 )
@@ -241,9 +248,9 @@ target_link_libraries(sim_force_estimatee
 target_link_libraries(leader_acc
     ${catkin_LIBRARIES}
 )
-target_link_libraries(leader_follower_circle
-    ${catkin_LIBRARIES}
-)
+#target_link_libraries(leader_follower_circle
+#    ${catkin_LIBRARIES}
+#)
 target_link_libraries(add_random
     ${catkin_LIBRARIES}
 )
@@ -259,6 +266,13 @@ target_link_libraries(offb
 target_link_libraries(apply_wrench
     ${catkin_LIBRARIES}
 )
+target_link_libraries(test_vv
+    ${catkin_LIBRARIES}
+)
+target_link_libraries(sim_two_drones
+    ${catkin_LIBRARIES}
+)
+target_link_libraries(world_plugin ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 #############
 ## Install ##
 #############
@@ -306,3 +320,4 @@ target_link_libraries(apply_wrench
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+

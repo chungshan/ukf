@@ -1,0 +1,26 @@
+<launch>
+<group ns = "uav1">
+   <node pkg="UKF" name="ukf" type="sim_force_estimatee" output="screen" >
+     <param name="topic_imu" value="/uav1/mavros/imu/data" />
+     <param name="topic_raw" value="/uav1/mavros/imu/data_raw" />
+     <param name="topic_mocap" value="/uav1/mavros/local_position/pose" />
+     <param name="topic_thrust" value="/uav1/mavros/rc/out" />
+     <param name="topic_mag" value="/uav1/mavros/imu/mag" />
+     <param name="topic_battery" value="/uav1/mavros/battery" />
+     <param name="topic_vel" value="/uav1/mavros/local_position/velocity_local" />
+     <param name="topic_drone" value="2" />
+   </node>
+</group>
+<group ns = "uav2">
+   <node pkg="UKF" name="ukf" type="sim_force_estimatee" output="screen" >
+     <param name="topic_imu" value="/uav2/mavros/imu/data" />
+     <param name="topic_raw" value="/uav2/mavros/imu/data_raw" />
+     <param name="topic_mocap" value="/uav2/mavros/local_position/pose" />
+     <param name="topic_thrust" value="/uav2/mavros/rc/out" />
+     <param name="topic_mag" value="/uav2/mavros/imu/mag" />
+     <param name="topic_battery" value="/uav2/mavros/battery" />
+     <param name="topic_vel" value="/uav2/mavros/local_position/velocity_local" />
+     <param name="topic_drone" value="2" />
+   </node>
+</group>
+</launch>

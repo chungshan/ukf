@@ -1,0 +1,178 @@
+#include <gazebo-7/gazebo/common/Plugin.hh>
+#include <ros/ros.h>
+#include <gazebo-7/gazebo/physics/Model.hh>
+#include <gazebo-7/gazebo/gazebo.hh>
+#include <gazebo-7/gazebo/physics/physics.hh>
+#include <gazebo-7/gazebo/common/Events.hh>
+#include <string>
+#include <iostream>
+#include <geometry_msgs/Point.h>
+
+geometry_msgs::Point break_joint, uav2_psi_groundtruth;
+void break_joint_cb(const geometry_msgs::Point::ConstPtr& msg){
+  break_joint = *msg;
+}
+
+namespace gazebo
+{
+class WorldPluginTutorial : public WorldPlugin
+{
+public:
+  WorldPluginTutorial() : WorldPlugin()
+  {
+  }
+
+  void Load(physics::WorldPtr _world, sdf::ElementPtr _sdf)
+  {
+    // Make sure the ROS node for Gazebo has already been initialized
+    if (!ros::isInitialized())
+    {
+      ROS_FATAL_STREAM("A ROS node for Gazebo has not been initialized, unable to load plugin. "
+        << "Load the Gazebo system plugin 'libgazebo_ros_api_plugin.so' in the gazebo_ros package)");
+      return;
+    }
+    this->world = _world;
+    this->updateRate = common::Time(0,common::Time::SecToNano(3));
+    this->prevUpdateTime = common::Time::GetWallTime();
+    this->rosSub = this->rosNode.subscribe<geometry_msgs::Point>("/break_joint", 2, break_joint_cb);
+    this->rosPub = this->rosNode.advertise<geometry_msgs::Point>("/uav2_psi_groundtruth", 2);
+    this->updateConnection = event::Events::ConnectWorldUpdateBegin(
+               boost::bind(&WorldPluginTutorial::OnUpdate, this, _1));
+    //this->iris_model = this->world->GetModel("iris1");
+    //this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
+  }
+  public: void OnUpdate(const common::UpdateInfo & /*_info*/)
+  {
+    /*
+    if(common::Time::GetWallTime() - this->prevUpdateTime > 25 && add_inv){
+      this->iris_model = this->world->GetModel("iris1");
+      this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
+
+    sdf::SDF sphereSDF;
+
+    sphereSDF.SetFromString(
+       "<sdf version ='1.4'>\
+          <joint name='payload_link_drone_joint' type='fixed'>\
+            <parent>iris1::base_link</parent>\
+            <child>payload::payload_link1_box</child>\
+            <pose>-0.00 0.0 0.0 0 0.0 0.0</pose>\
+              </joint>\
+        </sdf>");
+
+
+                <model name ='sphere'>\
+              <include>\
+                  <uri>model://payload</uri>\
+                  <pose>-0.02 -0.045 1.90 0 -1.57 0</pose>\
+                 </include>\
+                </model>\
+
+
+        sdf::ElementPtr model = sphereSDF.Root()->GetElement("model");
+         model->GetAttribute("name")->SetFromString("unique_sphere");
+         this->world->InsertModelSDF(sphereSDF);
+
+this->world->SetPaused(true);
+
+    add_inv = false;
+}
+ */
+
+    if(common::Time::GetWallTime() - this->prevUpdateTime > 15){
+      //this->iris_model = this->world->GetModel("iris1");
+      this->payload_model = this->world->GetModel("payload");
+      //this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
+      //this->joint_5 = this->payload_model->GetJoint("payload::payload_link_joint3");
+      this->payload_g = this->payload_model->GetLink("payload::payload_rec_g_box");
+      this->payload_g1 = this->payload_model->GetLink("payload::payload_rec_g1_box");
+      double x_pos = this->payload_g->GetWorldPose().pos.x;
+      double y_pos = this->payload_g->GetWorldPose().pos.y;
+      double g1_pos_x = this->payload_g1->GetWorldPose().pos.x;
+      double g1_pos_y = this->payload_g1->GetWorldPose().pos.y;
+      double dx = g1_pos_x - x_pos;
+      double dy = g1_pos_y - y_pos;
+      double psi = atan2(dy,dx) - 3.1415926/2;
+      uav2_psi_groundtruth.x = psi;
+      this->rosPub.publish(uav2_psi_groundtruth);
+      //ROS_INFO("l = %f, l* = %f", y_pos,joint_pos_y);
+}
+
+  //Double drones add joint
+double x;
+    if(common::Time::GetWallTime() - this->prevUpdateTime > 10 && add_inv_2){
+
+
+
+
+    this->iris_model = this->world->GetModel("iris1");
+    this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
+    this->payload_model = this->world->GetModel("payload");
+    this->payload_link = this->payload_model->GetLink("payload::payload_link1_box");
+    this->joint_ = this->world->GetPhysicsEngine()->CreateJoint("revolute2", this->iris_model);
+    this->joint_->Load(this->iris_base_link, this->payload_link, math::Pose(0,0,0.0,0,0,0));
+    this->joint_->Attach(this->iris_base_link,this->payload_link);
+    ignition::math::Vector3d joint_axis(0,1,0), joint_axis2(1,0,0);
+    this->joint_->SetAxis(0, joint_axis);
+    this->joint_->SetAxis(1, joint_axis2);
+    this->joint_->SetName("payload_drone_joint");
+    ROS_INFO("add joint1");
+
+    this->iris_model2 = this->world->GetModel("iris2");
+    this->iris_base_link2 = this->iris_model2->GetLink("iris2::base_link");
+    this->payload_model2 = this->world->GetModel("payload");
+    this->payload_link2 = this->payload_model2->GetLink("payload::payload_link2_box");
+    this->joint_2 = this->world->GetPhysicsEngine()->CreateJoint("revolute2", this->iris_model2);
+    this->joint_2->Load(this->iris_base_link2, this->payload_link2, math::Pose(0,0.0,0,0,0,0));
+    this->joint_2->Attach(this->iris_base_link2,this->payload_link2);
+    this->joint_2->SetAxis(0, joint_axis);
+    this->joint_2->SetAxis(1, joint_axis2);
+    this->joint_2->SetName("payload_drone_joint2");
+    ROS_INFO("add joint2");
+     add_inv_2 = false;
+
+    //For single drones, break joint
+/*
+if(break_joint.x == 1){
+    this->iris_model3 = this->world->GetModel("iris_rplidar");
+
+    this->joint_3 = this->iris_model3->GetJoint("iris_rplidar::payload::payload_link_joint");
+    this->joint_3->Reset();
+    this->joint_3->Detach();
+    this->joint_3->Fini();
+    ROS_INFO("theta = %f", break_joint.y);
+    ROS_INFO("theta measurement = %f", break_joint.z);
+    ROS_INFO("remove joint");
+   // this->world->SetPaused(true);
+
+    add_inv_2 = false;
+
+}
+*/
+ros::spinOnce();
+}
+
+  }
+    private: physics::WorldPtr world;
+
+    private: event::ConnectionPtr updateConnection;
+    common::Time updateRate;
+    common::Time prevUpdateTime;
+    //For double drones
+    private: physics::JointPtr joint_, joint_2;
+    private: physics::ModelPtr iris_model, iris_model2;
+    private: physics::ModelPtr payload_model, payload_model2;
+    private: physics::LinkPtr iris_base_link, iris_base_link2;
+    private: physics::LinkPtr payload_link, payload_link2, payload, payload_box2, payload_g, payload_g1;
+    bool add_inv = true;
+    bool add_inv_2 = true;
+    //For single drones
+    private: physics::JointPtr joint_3, joint_4, joint_5;
+    private: physics::ModelPtr iris_model3;
+    private: ros::NodeHandle rosNode;
+    private: ros::Subscriber rosSub;
+    private: ros::Publisher rosPub;
+
+
+};
+GZ_REGISTER_WORLD_PLUGIN(WorldPluginTutorial)
+}

@@ -38,7 +38,7 @@ Eigen::Vector3d iris_2_vel;
 Eigen::Vector3d payload_vel;
 
 double k=7, c=0.7;
-double length=0.2;
+double length=0.1;
 
 Eigen::Vector3d  p1 ,p2;
 Eigen::Vector3d  f1 , f2;
@@ -59,12 +59,12 @@ gazebo_msgs::BodyRequest body_name;
 geometry_msgs::Point force_on_drone;
 
 
-/*
+
 void link_cb(const gazebo_msgs::LinkStates::ConstPtr& msg){
    link_states = *msg;
    if(link_states.name.size()>0){
        for (unsigned int i=0;i<link_states.name.size();i++) {
-           if(link_states.name[i].compare("payload::connector1")==0){
+           if(link_states.name[i].compare("payload::payload_link1_box")==0){
                 con_1_pose<< link_states.pose[i].position.x,
                             link_states.pose[i].position.y,
                             link_states.pose[i].position.z;
@@ -76,7 +76,7 @@ void link_cb(const gazebo_msgs::LinkStates::ConstPtr& msg){
                 con1_vel.z = link_states.twist[i].linear.z;
 
            }
-           if(link_states.name[i].compare("payload::connector2")==0){
+           if(link_states.name[i].compare("payload::payload_link2_box")==0){
                con_2_pose<< link_states.pose[i].position.x,
                            link_states.pose[i].position.y,
                            link_states.pose[i].position.z;
@@ -92,12 +92,12 @@ void link_cb(const gazebo_msgs::LinkStates::ConstPtr& msg){
    }
 
 }
-*/
+
 void state_cb(const gazebo_msgs::ModelStates::ConstPtr& msg){
 model_states = *msg;
 if(model_states.name.size()>0){
     for(unsigned int i=0; i<model_states.name.size();i++){
-        if(model_states.name[i].compare("iris")==0){
+        if(model_states.name[i].compare("iris1")==0){
            iris_1_pose<< model_states.pose[i].position.x,
                          model_states.pose[i].position.y,
                          model_states.pose[i].position.z;
@@ -106,11 +106,14 @@ if(model_states.name.size()>0){
                         model_states.twist[i].linear.z;
 
         }
-        if(model_states.name[i].compare("payload")==0){
-            payload_pose.pose.position = model_states.pose[i].position;
-            payload_pose.pose.orientation = model_states.pose[i].orientation;
-            payload_pose_v << payload_pose.pose.position.x, payload_pose.pose.position.y, payload_pose.pose.position.z;
-            payload_vel_v << model_states.twist[i].linear.x, model_states.twist[i].linear.y, model_states.twist[i].linear.z;
+        if(model_states.name[i].compare("iris2")==0){
+           iris_2_pose<< model_states.pose[i].position.x,
+                         model_states.pose[i].position.y,
+                         model_states.pose[i].position.z;
+           iris_2_vel <<model_states.twist[i].linear.x,
+                        model_states.twist[i].linear.y,
+                        model_states.twist[i].linear.z;
+
         }
     }
 
@@ -125,17 +128,17 @@ if(model_states.name.size()>0){
                   2*x*z -2*w*y          , 2*y*z+2*w*x        ,w*w-x*x-y*y+z*z;
 
 
-    damp<<0.12 ,  0   ,  0,
-          0   ,  0.2 ,  0,
-           0  ,  0   , 0.15;
+    damp<<0.6 ,  0   ,  0,
+          0   ,1 ,  0,
+           0  ,  0   , 1.0;
 
-    spring<< 1.0 ,  0   ,  0,
-             0   , 1.0,  0,
-             0  ,  0   , 1.2;
+    spring<< 2.0 ,  0   ,  0,
+             0   , 4.0,  0,
+             0  ,  0   , 4.2;
 
-   p1= payload_pose_v - iris_1_pose;
+   p1= con_1_pose - iris_1_pose;
 
-   dv1=payload_vel_v - iris_1_vel;
+   dv1= con_1_vel - iris_1_vel;
 
     double delta1 = p1.norm() - length  ;
 
@@ -147,11 +150,23 @@ if(model_states.name.size()>0){
 
     }
 
+    p2= con_2_pose - iris_2_pose;
 
-    last_f1 = f1;
-    force_on_drone.x = f1(0);
-    force_on_drone.y = f1(1);
-    force_on_drone.z = f1(2);
+    dv2= con_2_vel - iris_2_vel;
+
+     double delta2 = p2.norm() - length  ;
+
+     if(delta2>0){
+         f2 =    spring *delta2*  p2/p2.norm()   +  damp* dv2/dv2.norm() ;
+
+     }else{
+         f2 <<0,0,0;
+
+     }
+    last_f2 = f2;
+    force_on_drone.x = f2(0);
+    force_on_drone.y = f2(1);
+    force_on_drone.z = f2(2);
 
     std::cout <<"+++++apply force+++++++++++++" <<std::endl;
     std::cout <<"f1" <<std::endl<<f1.transpose()<<std::endl;
@@ -160,21 +175,21 @@ if(model_states.name.size()>0){
     apply_wrench_iris1.request.wrench.force.y = 1*f1(1) *factor_1;
     apply_wrench_iris1.request.wrench.force.z = 1*f1(2)*factor_1;
 
-/*
-    apply_wrench_iris2.request.wrench.force.x = -1*f2(0)*factor_1;
-    apply_wrench_iris2.request.wrench.force.y =-1*f2(1) *factor_1;
-    apply_wrench_iris2.request.wrench.force.z = -1*f2(2)*factor_1;
-*/
+
+    apply_wrench_iris2.request.wrench.force.x = 1*f2(0)*factor_1;
+    apply_wrench_iris2.request.wrench.force.y =1*f2(1) *factor_1;
+    apply_wrench_iris2.request.wrench.force.z = 1*f2(2)*factor_1;
+
 
 
     apply_wrench_payload1.request.wrench.force.x = -f1(0)  *factor_2 ;
     apply_wrench_payload1.request.wrench.force.y =-f1(1) *factor_2 ;
     apply_wrench_payload1.request.wrench.force.z = -f1(2)*factor_2 ;
-/*
-    apply_wrench_payload2.request.wrench.force.x = f2(0)*factor_2 ;
-    apply_wrench_payload2.request.wrench.force.y =f2(1)*factor_2 ;
-    apply_wrench_payload2.request.wrench.force.z = f2(2)*factor_2;
-*/
+
+    apply_wrench_payload2.request.wrench.force.x = -f2(0)*factor_2 ;
+    apply_wrench_payload2.request.wrench.force.y =-f2(1)*factor_2 ;
+    apply_wrench_payload2.request.wrench.force.z = -f2(2)*factor_2;
+
 
 
 
@@ -249,10 +264,10 @@ int main(int argc, char **argv)
 
   ros::Subscriber state_sub = nh.subscribe<gazebo_msgs::ModelStates>
           ("/gazebo/model_states", 3, state_cb);
-  /*
+
   ros::Subscriber link_sub = nh.subscribe<gazebo_msgs::LinkStates>
           ("/gazebo/link_states", 3, link_cb);
-          */
+
   ros::Subscriber force1_sub = nh.subscribe<geometry_msgs::WrenchStamped>
           ("/ft_sensor1_topic", 3, force1_cb);
   ros::Subscriber force2_sub = nh.subscribe<geometry_msgs::WrenchStamped>
@@ -270,13 +285,20 @@ int main(int argc, char **argv)
 
 
 
-    apply_wrench_iris1.request.body_name="iris::base_link";
-    apply_wrench_payload1.request.body_name="payload::payload";
+    apply_wrench_iris1.request.body_name="iris1::base_link";
+    apply_wrench_payload1.request.body_name="payload::payload_link1_box";
 
     apply_wrench_payload1.request.duration = duration_;
 
     apply_wrench_iris1.request.duration = duration_;
 
+
+    apply_wrench_iris2.request.body_name="iris2::base_link";
+    apply_wrench_payload2.request.body_name="payload::payload_link2_box";
+
+    apply_wrench_payload2.request.duration = duration_;
+
+    apply_wrench_iris2.request.duration = duration_;
     std::cout << "ok" <<std::endl;
 
 
@@ -293,7 +315,8 @@ int main(int argc, char **argv)
 
     wrench_client.call(apply_wrench_iris1);
     wrench_client.call(apply_wrench_payload1);
-
+    wrench_client.call(apply_wrench_iris2);
+    wrench_client.call(apply_wrench_payload2);
     con1vel.publish(con1_vel);
     con2vel.publish(con2_vel);
 
