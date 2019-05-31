@@ -327,7 +327,7 @@ double KVx=1.3, KVy=1.3, KVz=0.2;
 double KIx=0.33, KIy=0.33, KIz=0.05;
 double KPyaw = 1;
 double m_rope = 0.2;
-double limit_contol_factor = 0.1;
+double limit_contol_factor = 0.2;
 
 double uav1_last_omega;
 
@@ -363,17 +363,17 @@ J_rope = m_rope * r_g * r_g;
 omega_des = g/r_g;
 theta_des = 135/57.29577951;
 l_star = 0.5;
-E = 0.5*J_rope*omega*omega + m_rope*g*r_g*(cos(theta) - 1);
-
+E = m_rope*g*r_g*(cos(theta) - 1);
+//E = m_rope*g*l_star*(cos(theta) - 1);
 alpha = (omega - uav1_last_omega)*30;
 alpha_filt = lpf2_uav1_alpha.filter(alpha);
 //E_des = 0.5*J_rope*omega_des;
 //E_des = 0;
 //E_des = m_rope*g*r_g*(cos(theta_des) - 1)+ 0.5*J_rope*(1.5*omega)*(1.5*omega);//for compress swinging motion
-E_des = m_rope*g*r_g*(cos(theta_des) - 1);
+E_des = m_rope*g*l_star*(cos(theta_des) - 1);
 E_des_z = m_rope*g*l_star*(1-cos(pi-theta_des));//for analysis only
 theta_z = -(theta + pi);
-E_z = 0.5*J_rope*omega*omega + m_rope*g*l_star*(1-cos(theta_z));//for analysis only
+E_z = m_rope*g*l_star*(1-cos(theta_z));//for analysis only
 E_dot_l = -m_rope*l_star*(-omega)*cos(theta_z)*uav1_acc_inertia(0)/2;
 
 uav1_E_dot_hat_theta.x = E_des_z;
@@ -453,7 +453,7 @@ Eigen::Vector4d cmdbodyrate_;
    }
    //uz = - 0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) - (0.5*m_rope)*l_star*omega*omega*cos(theta);
    //5*errz + 1.33*errvz;
-   a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 1.8*errz + 0.6*errvz;
+   a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 10*errz + 3.33*errvz;
    a_ref << ux, 0, uz/1.5;
    a_des << a_ref + a_fb - g_;
    q_des = acc2quaternion(a_des,uav1_yaw);
@@ -634,10 +634,10 @@ if(jumping_rope_control == true){
   phi_psi = atan2(-omega_psi/omega_zero_psi, theta_psi);
   omega_psi_n = omega_zero_psi*(1-(fabs(theta_psi))/pi);
   delta_E_psi = 0 - E_psi_filt;
-  if(fabs(delta_E_psi) > 0.5){
+  if(fabs(delta_E_psi) > 0.25){
     a_dis_psi =a_f_theta*copysign(1,delta_E_psi);//Always negative
   }else{
-    a_dis_psi = (a_f_theta/0.5)*delta_E_psi;
+    a_dis_psi = (a_f_theta/0.25)*delta_E_psi;
   }
   r_A1_psi = a_dis_psi*omega_psi_n*omega_psi_n*sin(phi_psi);//probelm in sin(phi_psi), the psi_omega is inaccurate.
   //ROS_INFO("uav2_r_A1_psi = %f", r_A1_psi);

@@ -79,20 +79,40 @@ this->world->SetPaused(true);
  */
 
     if(common::Time::GetWallTime() - this->prevUpdateTime > 15){
-      //this->iris_model = this->world->GetModel("iris1");
+      this->iris_model = this->world->GetModel("iris1");
+      this->iris_model2 = this->world->GetModel("iris2");
       this->payload_model = this->world->GetModel("payload");
-      //this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
+      this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
+      this->iris_base_link2 = this->iris_model2->GetLink("iris2::base_link");
       //this->joint_5 = this->payload_model->GetJoint("payload::payload_link_joint3");
       this->payload_g = this->payload_model->GetLink("payload::payload_rec_g_box");
       this->payload_g1 = this->payload_model->GetLink("payload::payload_rec_g1_box");
-      double x_pos = this->payload_g->GetWorldPose().pos.x;
-      double y_pos = this->payload_g->GetWorldPose().pos.y;
+      //For uav1 theta_theta
+      double uav1_x_pose = this->iris_base_link->GetWorldPose().pos.x;
+      double uav1_z_pose = this->iris_base_link->GetWorldPose().pos.z;
+      double g_pos_x = this->payload_g->GetWorldPose().pos.x;
+      double g_pos_z = this->payload_g->GetWorldPose().pos.z;
+      double uav1_dx = g_pos_x  - uav1_x_pose;
+      double uav1_dz = g_pos_z  - uav1_z_pose;
+      double uav1_theta_theta = atan2(uav1_dx,-uav1_dz);
+      //For uav2 theta
+      double uav2_x_pose = this->iris_base_link2->GetWorldPose().pos.x;
+      double uav2_z_pose = this->iris_base_link2->GetWorldPose().pos.z;
       double g1_pos_x = this->payload_g1->GetWorldPose().pos.x;
-      double g1_pos_y = this->payload_g1->GetWorldPose().pos.y;
-      double dx = g1_pos_x - x_pos;
-      double dy = g1_pos_y - y_pos;
-      double psi = atan2(dy,dx) - 3.1415926/2;
-      uav2_psi_groundtruth.x = psi;
+      double g1_pos_z = this->payload_g1->GetWorldPose().pos.z;
+      double uav2_dx = g1_pos_x  - uav2_x_pose;
+      double uav2_dz = g1_pos_z  - uav2_z_pose;
+      double uav2_theta = atan2(uav2_dx,-uav2_dz);
+      //For uav2 theta_theta
+
+      double uav2_dxx = g_pos_x  - uav2_x_pose;
+      double uav2_dzz = g_pos_z  - uav2_z_pose;
+      double uav2_theta_theta = atan2(uav2_dxx,-uav2_dzz);
+      //For uav2 theta_psi
+      double uav2_theta_psi = uav2_theta - uav2_theta_theta;
+      uav2_psi_groundtruth.x = uav2_theta_psi;
+      uav2_psi_groundtruth.y = uav2_theta_theta;
+      uav2_psi_groundtruth.z = uav1_theta_theta;
       this->rosPub.publish(uav2_psi_groundtruth);
       //ROS_INFO("l = %f, l* = %f", y_pos,joint_pos_y);
 }
