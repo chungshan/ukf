@@ -173,6 +173,7 @@ ros::spinOnce();
     private: ros::Publisher rosPub;
 
 
+
 };
 GZ_REGISTER_WORLD_PLUGIN(WorldPluginTutorial)
 }

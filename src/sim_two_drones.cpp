@@ -16,7 +16,7 @@
 #include <geometry_msgs/WrenchStamped.h>
 #include <sensor_msgs/Imu.h>
 #include "lpf2.h"
-geometry_msgs::Point uav1_theta_hat_1_p,uav1_theta_hat_1_meas_p,uav1_force_est, uav2_force_est, uav1_rope_angle, uav2_rope_angle, uav2_theta_hat,uav2_theta_hat_meas, uav2_psi_hat, uav2_psi_hat_meas,uav2_E_dot_hat_theta,uav1_E_dot_hat_theta, uav1_control_input,uav2_control_input, uav1_theta;
+geometry_msgs::Point uav1_pose_z,uav2_pose_z,uav1_theta_hat_1_p,uav1_theta_hat_1_meas_p,uav1_force_est, uav2_force_est, uav1_rope_angle, uav2_rope_angle, uav2_theta_hat,uav2_theta_hat_meas, uav2_psi_hat, uav2_psi_hat_meas,uav2_E_dot_hat_theta,uav1_E_dot_hat_theta, uav1_control_input,uav2_control_input, uav1_theta;
 lpf2 lpf2_E_hat_dot(10,0.0333);
 lpf2 lpf2_E_f_dot(10,0.0333);
 lpf2 lpf2_E_hat_dot_psi(10,0.0333);
@@ -73,7 +73,7 @@ void uav1_host_pos(const geometry_msgs::PoseStamped::ConstPtr& msg)
         uav1_RIB<< w*w+x*x-y*y-z*z  , 2*x*y-2*w*z ,            2*x*z+2*w*y,
             2*x*y +2*w*z           , w*w-x*x+y*y-z*z    ,2*y*z-2*w*x,
             2*x*z -2*w*y          , 2*y*z+2*w*x        ,w*w-x*x-y*y+z*z;
-
+        uav1_pose_z.z = uav1_host_mocap.pose.position.z;
 
 }
 
@@ -149,6 +149,7 @@ void uav2_host_pos(const geometry_msgs::PoseStamped::ConstPtr& msg)
             2*x*y +2*w*z           , w*w-x*x+y*y-z*z    ,2*y*z-2*w*x,
             2*x*z -2*w*y          , 2*y*z+2*w*x        ,w*w-x*x-y*y+z*z;
 
+        uav2_pose_z.z = uav2_host_mocap.pose.position.z;
 
 }
 
@@ -384,7 +385,8 @@ uav1_theta.y = pi - theta_des;
 errx = -(host_mocap.pose.position.x - vir.x);
 erry = -(host_mocap.pose.position.y - vir.y);
 errz = -(host_mocap.pose.position.z - vir.z);
-
+uav1_pose_z.x = fabs(errz);
+uav1_pose_z.y = vir.z;
 errvx = -(host_mocapvel.twist.linear.x - 0);
 errvy = -(host_mocapvel.twist.linear.y - 0);
 errvz = -(host_mocapvel.twist.linear.z - 0);
@@ -449,9 +451,10 @@ Eigen::Vector4d cmdbodyrate_;
    if(ux < - limit_contol_factor*ng){
      ux =  - limit_contol_factor*ng;
    }
-   uz = - 0.1*(0.5*m_rope)*l_star*alpha_filt*sin(theta) - 0.1*(0.5*m_rope)*l_star*omega*omega*cos(theta);
-   a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 5*errz + 1.33*errvz;
-   a_ref << ux, 0, uz;
+   //uz = - 0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) - (0.5*m_rope)*l_star*omega*omega*cos(theta);
+   //5*errz + 1.33*errvz;
+   a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 1.8*errz + 0.6*errvz;
+   a_ref << ux, 0, uz/1.5;
    a_des << a_ref + a_fb - g_;
    q_des = acc2quaternion(a_des,uav1_yaw);
    cmdbodyrate_ = attcontroller(q_des,a_des,uav1_mavatt_);
@@ -460,6 +463,7 @@ Eigen::Vector4d cmdbodyrate_;
    pose->body_rate.z = cmdbodyrate_(2);
    pose->thrust = cmdbodyrate_(3);
    uav1_control_input.x = ux;
+   uav1_control_input.z = uz/1.5;
  }
 
 
@@ -536,7 +540,7 @@ uav2_E_dot_hat_theta.y = E_theta_hat_dot_filt;
 errx = -(host_mocap.pose.position.x - vir.x);
 erry = -(host_mocap.pose.position.y - vir.y);
 errz = -(host_mocap.pose.position.z - vir.z);
-
+uav2_pose_z.x = fabs(errz);
 errvx = -(host_mocapvel.twist.linear.x - 0);
 errvy = -(host_mocapvel.twist.linear.y - 0);
 errvz = -(host_mocapvel.twist.linear.z - 0);
@@ -766,6 +770,9 @@ int main(int argc, char **argv)
   ros::Publisher uav1_theta_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta", 2);
   ros::Publisher uav1_theta_hat_1_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta_hat_1", 2);
   ros::Publisher uav1_theta_hat_1_meas_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta_hat_1_meas", 2);
+  ros::Publisher uav1_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav1_pose", 2);
+  ros::Publisher uav2_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav2_pose", 2);
+  ros::Publisher uav1_control_input_pub = nh.advertise<geometry_msgs::Point>("uav1_control_input", 2);
   ros::Rate rate(30);
 
   while (ros::ok() && uav1_current_state.connected && uav2_current_state.connected) {
@@ -1026,7 +1033,7 @@ int main(int argc, char **argv)
 
 
    uav1_theta_hat_1_p.x = -(uav1_theta_hat_1(0)+pi);
-   uav1_theta_hat_1_p.y = -uav1_theta_hat_1(1);
+   uav1_theta_hat_1_p.y = uav1_theta_hat_1(1);
    uav1_theta_hat_1_meas_p.x = -(uav1_theta_hat_1_meas(0)+pi);
    uav1_theta_hat_1_meas_p.y = -uav1_theta_hat_1_meas(1);
 
@@ -1042,6 +1049,9 @@ int main(int argc, char **argv)
    double psi_filt;
    psi_filt = lpf2_psi_dot.filter(uav2_theta_psi_dot);
    //uav2_psi_hat.z =psi_filt;
+   uav1_control_input_pub.publish(uav1_control_input);
+   uav1_pose_z_pub.publish(uav1_pose_z);
+   uav2_pose_z_pub.publish(uav2_pose_z);
    uav1_theta_hat_1_pub.publish(uav1_theta_hat_1_p);
    uav1_theta_hat_1_meas_pub.publish(uav1_theta_hat_1_meas_p);
    uav1_theta_pub.publish(uav1_theta);
