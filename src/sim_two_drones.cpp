@@ -330,7 +330,7 @@ double m_rope = 0.2;
 double limit_contol_factor = 0.2;
 
 double uav1_last_omega;
-
+double total_air;
 void follow_omega1(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped& host_mocapvel, mavros_msgs::AttitudeTarget* pose,double theta,double theta_2,double omega,double omega_2)
 {
 float errx, erry, errz, err_roll;
@@ -357,28 +357,42 @@ double theta_des;
 double E_dot_l;
 double theta_z;
 double l_star;
+const double c_d = 0.82;
+const double Area = 1.5*0.05;
+double E_dot_comp;
+double theta_des_sign;
+double v_c;
 e3 << 0,0,1;
 r_g = 0.5;
 J_rope = m_rope * r_g * r_g;
 omega_des = g/r_g;
 theta_des = 135/57.29577951;
 l_star = 0.5;
-E = m_rope*g*r_g*(cos(theta) - 1);
+v_c = l_star*omega;
+E = m_rope*g*r_g*(cos(theta) - 1)  + 0.5*J_rope*(omega)*(omega);
+// + 0.5*J_rope*(omega)*(omega)
 //E = m_rope*g*l_star*(cos(theta) - 1);
 alpha = (omega - uav1_last_omega)*30;
 alpha_filt = lpf2_uav1_alpha.filter(alpha);
 //E_des = 0.5*J_rope*omega_des;
 //E_des = 0;
 //E_des = m_rope*g*r_g*(cos(theta_des) - 1)+ 0.5*J_rope*(1.5*omega)*(1.5*omega);//for compress swinging motion
-E_des = m_rope*g*l_star*(cos(theta_des) - 1);
-E_des_z = m_rope*g*l_star*(1-cos(pi-theta_des));//for analysis only
+
 theta_z = -(theta + pi);
-E_z = m_rope*g*l_star*(1-cos(theta_z));//for analysis only
+if(omega>0){
+  theta_des_sign = -1;
+}
+else{
+  theta_des_sign = 1;
+}
+E_des = m_rope*g*l_star*(cos(theta_des) - 1) + 0.5*c_d*Area*1.2*v_c*v_c*l_star*(theta_des_sign*theta_des-theta);
+E_des_z = m_rope*g*l_star*(1-cos(pi-theta_des)) + 0.5*c_d*Area*1.2*v_c*v_c*l_star*(theta_des_sign*theta_des-theta);//for analysis only
+E_z = m_rope*g*l_star*(1-cos(theta_z)) + 0.5*J_rope*(omega)*(omega);//for analysis only
 E_dot_l = -m_rope*l_star*(-omega)*cos(theta_z)*uav1_acc_inertia(0)/2;
 
 uav1_E_dot_hat_theta.x = E_des_z;
 uav1_E_dot_hat_theta.y = E_z;
-uav1_E_dot_hat_theta.z = E_dot_l;
+uav1_E_dot_hat_theta.z = E_des_z - E_z;
 
 uav1_theta.x = theta_z;
 uav1_theta.y = pi - theta_des;
@@ -444,17 +458,18 @@ Eigen::Vector4d cmdbodyrate_;
  //ROS_INFO("u: %.4f,%.4f,%.4f,%.4f",cmdbodyrate_(0),cmdbodyrate_(1),cmdbodyrate_(2),cmdbodyrate_(3));
  if(jumping_rope_control == true){
    //ux = 0.4*(E-E_des)*omega*cos(theta) + 0.1 * copysign(1,host_mocap.pose.position.x) * log(1-fabs(host_mocap.pose.position.x)/1);
-   ux = 4*(E-E_des)*omega*cos(theta);
+   E_dot_comp = 0.5*c_d*Area*1.2*v_c*v_c*v_c;
+   ux = 4*(E-E_des)*omega*cos(theta) - 2*E_dot_comp/(m_rope*l_star*omega*cos(theta));
    if(ux > limit_contol_factor*ng){
      ux =  limit_contol_factor*ng;
    }
    if(ux < - limit_contol_factor*ng){
      ux =  - limit_contol_factor*ng;
    }
-   //uz = - 0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) - (0.5*m_rope)*l_star*omega*omega*cos(theta);
+   uz = - 0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) - (0.5*m_rope)*l_star*omega*omega*cos(theta);
    //5*errz + 1.33*errvz;
-   a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 10*errz + 3.33*errvz;
-   a_ref << ux, 0, uz/1.5;
+   a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 5*errz + 1.33*errvz;
+   a_ref << ux, 0,0;//uz/1.5
    a_des << a_ref + a_fb - g_;
    q_des = acc2quaternion(a_des,uav1_yaw);
    cmdbodyrate_ = attcontroller(q_des,a_des,uav1_mavatt_);
@@ -502,6 +517,10 @@ double l_star;
 double dt;
 double E_theta_hat_dot_filt, E_dot_f_filt, E_theta_hat_dot_filt_psi, E_dot_f_filt_psi, E_psi_filt;
 double delta_E_psi, copysign_;
+double E_dot_comp;
+const double c_d = 0.82;
+const double Area = 1.5*0.05;
+double v_c;
 dt = 0.03333;
 e3 << 0,0,1;
 r_g = 0.51;
@@ -511,13 +530,16 @@ omega_des = g/r_g;
 E = 0.5*J_rope*omega*omega + m_rope*g*r_g*(cos(theta) - 1);
 //E_des = 0.5*J_rope*omega_des;
 E_des = 0;
+v_c = l_star*omega;
+E_dot_comp = 0.5*c_d*Area*1.2*v_c*v_c*v_c;
+
 //For theta oscillation
 E_dot_f = -m_rope*l_star*omega*cos(theta)*uav2_acc_inertia(0)/2;
 E_theta_hat = 0.5*m_rope*l_star*l_star*omega*omega + m_rope*g*l_star*(1-cos(theta));
 E_theta_hat_dot = (E_theta_hat- E_theta_hat_last)/dt;
 E_theta_hat_dot_filt = lpf2_E_hat_dot.filter(E_theta_hat_dot);
 E_dot_f_filt = lpf2_E_f_dot.filter(E_dot_f);
-E_dot_l = E_theta_hat_dot_filt - E_dot_f_filt;
+E_dot_l = E_theta_hat_dot_filt - E_dot_f_filt + E_dot_comp;
 E_theta_hat_last = E_theta_hat;
 //For psi oscillation
 E_dot_f_psi = -m_rope*omega_psi*cos(theta_psi)*uav2_acc_inertia(0)/2;
@@ -643,7 +665,7 @@ if(jumping_rope_control == true){
   //ROS_INFO("uav2_r_A1_psi = %f", r_A1_psi);
       //ux = 0.4*(E-E_des)*omega*cos(theta);
 
-  ux = r_A1_theta +  r_A1_psi;
+  ux = r_A1_theta + r_A1_psi;
   if(ux > limit_contol_factor*ng){
     ux =  limit_contol_factor*ng;
   }

@@ -35,7 +35,7 @@ public:
     this->updateRate = common::Time(0,common::Time::SecToNano(3));
     this->prevUpdateTime = common::Time::GetWallTime();
     this->rosSub = this->rosNode.subscribe<geometry_msgs::Point>("/break_joint", 2, break_joint_cb);
-    this->rosPub = this->rosNode.advertise<geometry_msgs::Point>("/uav2_psi_groundtruth", 2);
+    this->rosPub = this->rosNode.advertise<geometry_msgs::Point>("/theta_groundtruth", 2);
     this->updateConnection = event::Events::ConnectWorldUpdateBegin(
                boost::bind(&WorldPluginTutorial::OnUpdate, this, _1));
     //this->iris_model = this->world->GetModel("iris1");
