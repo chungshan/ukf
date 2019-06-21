@@ -64,6 +64,7 @@ void link_cb(const gazebo_msgs::LinkStates::ConstPtr& msg){
    link_states = *msg;
    if(link_states.name.size()>0){
        for (unsigned int i=0;i<link_states.name.size();i++) {
+         /*
            if(link_states.name[i].compare("payload::payload_link1_box")==0){
                 con_1_pose<< link_states.pose[i].position.x,
                             link_states.pose[i].position.y,
@@ -87,6 +88,18 @@ void link_cb(const gazebo_msgs::LinkStates::ConstPtr& msg){
                con2_vel.y = link_states.pose[i].position.y;
                con2_vel.z = link_states.pose[i].position.z;
            }
+*/
+         if(link_states.name[i].compare("payload::payload_rec")==0){
+             payload_pose_v<< link_states.pose[i].position.x,
+                         link_states.pose[i].position.y,
+                         link_states.pose[i].position.z;
+             con_2_vel<< link_states.twist[i].linear.x,
+                         link_states.twist[i].linear.y,
+                         link_states.twist[i].linear.z;
+             con2_vel.x = link_states.pose[i].position.x;
+             con2_vel.y = link_states.pose[i].position.y;
+             con2_vel.z = link_states.pose[i].position.z;
+         }
 
        }
    }

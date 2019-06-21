@@ -16,6 +16,10 @@
 #include <geometry_msgs/WrenchStamped.h>
 #include <sensor_msgs/Imu.h>
 #include "lpf2.h"
+#include <gazebo_msgs/ApplyBodyWrench.h>
+#include <geometry_msgs/Wrench.h>
+gazebo_msgs::ApplyBodyWrench drone_apply_force;
+geometry_msgs::Wrench apply_wrench;
 geometry_msgs::Point uav1_pose_z,uav2_pose_z,uav1_theta_hat_1_p,uav1_theta_hat_1_meas_p,uav1_force_est, uav2_force_est, uav1_rope_angle, uav2_rope_angle, uav2_theta_hat,uav2_theta_hat_meas, uav2_psi_hat, uav2_psi_hat_meas,uav2_E_dot_hat_theta,uav1_E_dot_hat_theta, uav1_control_input,uav2_control_input, uav1_theta;
 lpf2 lpf2_E_hat_dot(10,0.0333);
 lpf2 lpf2_E_f_dot(10,0.0333);
@@ -24,7 +28,10 @@ lpf2 lpf2_E_f_dot_psi(10,0.0333);
 lpf2 lpf2_E_psi(10,0.0333);
 lpf2 lpf2_psi_dot(10,0.0333);
 lpf2 lpf2_uav1_alpha(10,0.0333);
-bool jumping_rope_control = false, start_observer = false;
+lpf2 lpf2_uav2_alpha(10,0.0333);
+lpf2 lpf2_uav1_omega(10,0.0333);
+lpf2 lpf2_uav2_omega(10,0.0333);
+bool jumping_rope_control = false, start_observer = false, apply_wrench_flag = false;
 
 //payload's imu cb
 sensor_msgs::Imu payload_imu;
@@ -327,7 +334,7 @@ double KVx=1.3, KVy=1.3, KVz=0.2;
 double KIx=0.33, KIy=0.33, KIz=0.05;
 double KPyaw = 1;
 double m_rope = 0.2;
-double limit_contol_factor = 0.2;
+double limit_contol_factor = 0.1;
 
 double uav1_last_omega;
 double total_air;
@@ -362,6 +369,7 @@ const double Area = 1.5*0.05;
 double E_dot_comp;
 double theta_des_sign;
 double v_c;
+double uav1_omega_filt;
 e3 << 0,0,1;
 r_g = 0.5;
 J_rope = m_rope * r_g * r_g;
@@ -372,7 +380,10 @@ v_c = l_star*omega;
 E = m_rope*g*r_g*(cos(theta) - 1)  + 0.5*J_rope*(omega)*(omega);
 // + 0.5*J_rope*(omega)*(omega)
 //E = m_rope*g*l_star*(cos(theta) - 1);
-alpha = (omega - uav1_last_omega)*30;
+uav1_omega_filt = lpf2_uav1_omega.filter(omega);
+alpha = (uav1_omega_filt - uav1_last_omega)*30;
+uav1_last_omega = uav1_omega_filt;
+
 alpha_filt = lpf2_uav1_alpha.filter(alpha);
 //E_des = 0.5*J_rope*omega_des;
 //E_des = 0;
@@ -459,14 +470,15 @@ Eigen::Vector4d cmdbodyrate_;
  if(jumping_rope_control == true){
    //ux = 0.4*(E-E_des)*omega*cos(theta) + 0.1 * copysign(1,host_mocap.pose.position.x) * log(1-fabs(host_mocap.pose.position.x)/1);
    E_dot_comp = 0.5*c_d*Area*1.2*v_c*v_c*v_c;
-   ux = 4*(E-E_des)*omega*cos(theta) - 2*E_dot_comp/(m_rope*l_star*omega*cos(theta));
+   ux = 4*(E-E_des)*omega*cos(theta) + c_d*Area*1.2*l_star*theta_z*l_star*(-omega)/(m_rope*l_star*(-omega)*cos(theta_z));
+   ROS_INFO("test = %f", c_d*Area*1.2*l_star*theta_z*l_star*(-omega)/(m_rope*l_star*(-omega)*cos(theta_z)));
    if(ux > limit_contol_factor*ng){
      ux =  limit_contol_factor*ng;
    }
    if(ux < - limit_contol_factor*ng){
      ux =  - limit_contol_factor*ng;
    }
-   uz = - 0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) - (0.5*m_rope)*l_star*omega*omega*cos(theta);
+   uz = - 0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) - 0.5*(0.5*m_rope)*l_star*uav1_omega_filt*uav1_omega_filt*cos(theta);
    //5*errz + 1.33*errvz;
    a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 5*errz + 1.33*errvz;
    a_ref << ux, 0,0;//uz/1.5
@@ -487,6 +499,8 @@ Eigen::Vector4d cmdbodyrate_;
 double uav2_sumx,uav2_sumy,uav2_sumz;
 double E_theta_hat_last, E_theta_hat_last_psi;
 double a_f_theta_filt;
+double uav2_last_omega;
+
 void follow_omega2(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped& host_mocapvel, mavros_msgs::AttitudeTarget* pose,double theta,double theta_psi,double omega,double omega_psi)
 {
 float errx, erry, errz, err_roll;
@@ -504,7 +518,6 @@ const double mp = 0.6;
 const double mq = 1.5;
 const double L = 0.5;
 double jumping_rope_uy;
-double alpha;
 double uz_f;
 Eigen::Vector3d total_thrust;
 Eigen::Vector3d e3;
@@ -521,6 +534,8 @@ double E_dot_comp;
 const double c_d = 0.82;
 const double Area = 1.5*0.05;
 double v_c;
+double alpha, alpha_filt;
+double uav2_omega_filt;
 dt = 0.03333;
 e3 << 0,0,1;
 r_g = 0.51;
@@ -532,7 +547,10 @@ E = 0.5*J_rope*omega*omega + m_rope*g*r_g*(cos(theta) - 1);
 E_des = 0;
 v_c = l_star*omega;
 E_dot_comp = 0.5*c_d*Area*1.2*v_c*v_c*v_c;
-
+uav2_omega_filt = lpf2_uav2_omega.filter(omega);
+alpha = (uav2_omega_filt - uav2_last_omega)*30;
+uav2_last_omega = uav2_omega_filt;
+alpha_filt = lpf2_uav2_alpha.filter(alpha);
 //For theta oscillation
 E_dot_f = -m_rope*l_star*omega*cos(theta)*uav2_acc_inertia(0)/2;
 E_theta_hat = 0.5*m_rope*l_star*l_star*omega*omega + m_rope*g*l_star*(1-cos(theta));
@@ -672,9 +690,10 @@ if(jumping_rope_control == true){
   if(ux < - limit_contol_factor*ng){
     ux =  - limit_contol_factor*ng;
   }
+  uz = -0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) + 0.5*(0.5*m_rope)*l_star*uav2_omega_filt*uav2_omega_filt*cos(theta);
 
   //ROS_INFO("uav2_ux = %f", ux);
-  a_fb <<  0, 9*erry + 2.25*errvy+ uav2_sumy, 10*errz + 3.33*errvz;
+  a_fb <<  0, 9*erry + 2.25*errvy+ uav2_sumy, 5*errz + 1.33*errvz;
   a_ref << ux, 0, 0;
   a_des << a_ref + a_fb - g_;
   q_des = acc2quaternion(a_des,uav2_yaw);
@@ -795,6 +814,8 @@ int main(int argc, char **argv)
   ros::Publisher uav1_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav1_pose", 2);
   ros::Publisher uav2_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav2_pose", 2);
   ros::Publisher uav1_control_input_pub = nh.advertise<geometry_msgs::Point>("uav1_control_input", 2);
+  ros::ServiceClient apply_force_client = nh.serviceClient<gazebo_msgs::ApplyBodyWrench>("/gazebo/apply_body_wrench");
+
   ros::Rate rate(30);
 
   while (ros::ok() && uav1_current_state.connected && uav2_current_state.connected) {
@@ -889,6 +910,7 @@ int main(int argc, char **argv)
    }
 
    int c = getch();
+
    //ROS_INFO("C: %d",c);
    if (c != EOF) {
        switch (c) {
@@ -915,6 +937,9 @@ int main(int argc, char **argv)
            break;
        case 50:
          start_observer = true;
+         break;
+       case 53:
+         apply_wrench_flag = true;
          break;
        case 120:    // key back
            vir1.x += -0.05;
@@ -961,6 +986,24 @@ int main(int argc, char **argv)
    vir2.roll = vir2.roll + 2*pi;
 
 
+   //Apply wrench
+
+   if(apply_wrench_flag){
+     ros::Duration duration_(0.8);
+     //
+     drone_apply_force.request.body_name="payload::payload_rec";
+     drone_apply_force.request.duration = duration_;
+     //drone_apply_force.request.reference_point = ref_point;
+     apply_wrench.force.x = 2;
+     apply_wrench.force.y = 0;
+     apply_wrench.force.z = 0;
+     drone_apply_force.request.wrench = apply_wrench;
+     apply_force_client.call(drone_apply_force);
+
+     apply_wrench_flag = false;
+   }
+
+
    //Calculate rope angle
 
    double uav1_rope_theta,uav2_rope_theta, uav1_rope_theta_sensor, uav2_rope_theta_sensor;
@@ -981,7 +1024,7 @@ int main(int argc, char **argv)
    }
 
    uav1_rope_theta = -uav1_rope_theta;
-   uav1_rope_angle.x = uav1_rope_theta;
+   uav1_rope_angle.x = -(uav1_rope_theta+pi);
     //uav2
    if(uav2_force_est.z < 0){
      uav2_rope_theta = atan2(uav2_force_est.z,uav2_force_est.x) + 2*pi;
@@ -1003,7 +1046,7 @@ int main(int argc, char **argv)
 
 
 
-   uav2_rope_angle.x = -(uav2_rope_theta + pi);
+   //uav2_rope_angle.x = -(uav2_rope_theta + pi);
 
    //From force sensor
    if(uav1_wrench.wrench.force.x < 0 && uav1_wrench.wrench.force.z > 0){
@@ -1013,7 +1056,7 @@ int main(int argc, char **argv)
    else{
    uav1_rope_theta_sensor = atan2(uav1_wrench.wrench.force.z,uav1_wrench.wrench.force.x) - 3.1415926/2;
 }
-   uav1_rope_angle.y = uav1_rope_theta_sensor;
+   uav1_rope_angle.y = -(uav1_rope_theta_sensor+pi);
 
 
    if(uav2_wrench.wrench.force.x < 0 && uav2_wrench.wrench.force.z > 0){

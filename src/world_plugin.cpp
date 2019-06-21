@@ -91,6 +91,7 @@ this->world->SetPaused(true);
       double uav1_x_pose = this->iris_base_link->GetWorldPose().pos.x;
       double uav1_z_pose = this->iris_base_link->GetWorldPose().pos.z;
       double g_pos_x = this->payload_g->GetWorldPose().pos.x;
+      double g_pos_y = this->payload_g->GetWorldPose().pos.y;
       double g_pos_z = this->payload_g->GetWorldPose().pos.z;
       double uav1_dx = g_pos_x  - uav1_x_pose;
       double uav1_dz = g_pos_z  - uav1_z_pose;
@@ -99,6 +100,7 @@ this->world->SetPaused(true);
       double uav2_x_pose = this->iris_base_link2->GetWorldPose().pos.x;
       double uav2_z_pose = this->iris_base_link2->GetWorldPose().pos.z;
       double g1_pos_x = this->payload_g1->GetWorldPose().pos.x;
+      double g1_pos_y = this->payload_g1->GetWorldPose().pos.y;
       double g1_pos_z = this->payload_g1->GetWorldPose().pos.z;
       double uav2_dx = g1_pos_x  - uav2_x_pose;
       double uav2_dz = g1_pos_z  - uav2_z_pose;
@@ -109,7 +111,11 @@ this->world->SetPaused(true);
       double uav2_dzz = g_pos_z  - uav2_z_pose;
       double uav2_theta_theta = atan2(uav2_dxx,-uav2_dzz);
       //For uav2 theta_psi
-      double uav2_theta_psi = uav2_theta - uav2_theta_theta;
+
+      double uav2_dxxx = g1_pos_x  - g_pos_x;
+      double uav2_dyyy = g1_pos_y  - g_pos_y;
+      //double uav2_theta_psi = uav2_theta - uav2_theta_theta;
+      double uav2_theta_psi = atan2(uav2_dxxx, uav2_dyyy);
       uav2_psi_groundtruth.x = uav2_theta_psi;
       uav2_psi_groundtruth.y = uav2_theta_theta;
       uav2_psi_groundtruth.z = uav1_theta_theta;
