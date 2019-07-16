@@ -43,41 +43,8 @@ public:
   }
   public: void OnUpdate(const common::UpdateInfo & /*_info*/)
   {
-    /*
-    if(common::Time::GetWallTime() - this->prevUpdateTime > 25 && add_inv){
-      this->iris_model = this->world->GetModel("iris1");
-      this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
 
-    sdf::SDF sphereSDF;
-
-    sphereSDF.SetFromString(
-       "<sdf version ='1.4'>\
-          <joint name='payload_link_drone_joint' type='fixed'>\
-            <parent>iris1::base_link</parent>\
-            <child>payload::payload_link1_box</child>\
-            <pose>-0.00 0.0 0.0 0 0.0 0.0</pose>\
-              </joint>\
-        </sdf>");
-
-
-                <model name ='sphere'>\
-              <include>\
-                  <uri>model://payload</uri>\
-                  <pose>-0.02 -0.045 1.90 0 -1.57 0</pose>\
-                 </include>\
-                </model>\
-
-
-        sdf::ElementPtr model = sphereSDF.Root()->GetElement("model");
-         model->GetAttribute("name")->SetFromString("unique_sphere");
-         this->world->InsertModelSDF(sphereSDF);
-
-this->world->SetPaused(true);
-
-    add_inv = false;
-}
- */
-
+    //Ground truth calculation
     if(common::Time::GetWallTime() - this->prevUpdateTime > 15){
       this->iris_model = this->world->GetModel("iris1");
       this->iris_model2 = this->world->GetModel("iris2");
@@ -123,13 +90,9 @@ this->world->SetPaused(true);
       //ROS_INFO("l = %f, l* = %f", y_pos,joint_pos_y);
 }
 
-  //Double drones add joint
+  //Two drones add joints between payload's links and drones
 double x;
     if(common::Time::GetWallTime() - this->prevUpdateTime > 10 && add_inv_2){
-
-
-
-
     this->iris_model = this->world->GetModel("iris1");
     this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
     this->payload_model = this->world->GetModel("payload");

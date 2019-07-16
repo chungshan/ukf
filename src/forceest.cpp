@@ -91,6 +91,8 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
                   0, 0.0, 0,
                   0, 0, 0.0;
         //beta << betax, betay, betaz;
+
+
         //USQUE
         delta_p << ex, ey, ez;
         p_v << px, py, pz;
@@ -102,10 +104,6 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         delta_q4 = (-a*(ex*ex+ey*ey+ez*ez) + f*sqrt(f*f + (1 - a*a)*(ex*ex+ey*ey+ez*ez)))/(f*f + ex*ex+ey*ey+ez*ez);
         delta_q3 = (a+delta_q4)*delta_p/f;
         delta_q << delta_q3, delta_q4;
-
-
-
-
 
         //compute sigma-point quaternions from error quaternions, initial q_k = 0,0,0,1
         if( i == 0){
@@ -120,8 +118,6 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
                  -delta_q3(0), -delta_q3(1), -delta_q3(2), delta_q4;
           q_k_sigma = phi_q * last_quat;
         }
-
-
 
         //The quaternions are subsequently propagated forward in time using
 
@@ -151,13 +147,10 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
                 -sin(0.5*sqrt(omega_value)*delta_t)*omegax/(sqrt(omega_value)), -sin(0.5*sqrt(omega_value)*delta_t)*omegay/(sqrt(omega_value)), -sin(0.5*sqrt(omega_value)*delta_t)*omegaz/(sqrt(omega_value)), cos(0.5*sqrt(omega_value)*delta_t);
         q_k1_sigma = omega * q_k_sigma;
 
-
-
         if(i==0){
           qk1 = q_k1_sigma; // 第0個sigma point,會丟進去correct
-
         }
-        //the propagated error quaternions are determined usingm, quater是否恆等於1
+        //the propagated error quaternions are determined using, quater是否恆等於1
         double quater;
 
         if(i == 0){
@@ -188,7 +181,7 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
 
 
 
-        //he propagated sigma points are calculated using
+        //The propagated sigma points are calculated using
         delta_p_k1 << delta_q_k1(0), delta_q_k1(1), delta_q_k1(2);
         delta_q_4_k1 = delta_q_k1(3);
 

@@ -30,7 +30,7 @@ bool initial = false;
 bool jumping_rope_control = false;
 bool initial_acc = false;
 int flag=0;
-float KPx=5, KPy=5, KPz=0.6;
+float KPx=4, KPy=4, KPz=0.6;
 float KVx=1.67, KVy=1.67, KVz=0.2;
 float KIx=0.33, KIy=0.33, KIz=0.05;
 float KPyaw = 1;
@@ -118,9 +118,9 @@ errz = vir.z - host_mocap.pose.position.z;
 velocity.x = (host_mocap.pose.position.x-last_pos.x)/0.02;
 velocity.y = (host_mocap.pose.position.y-last_pos.y)/0.02;
 velocity.z = (host_mocap.pose.position.z-last_pos.z)/0.02;
-errvx = 0 - velocity.x;
-errvy = 0 - velocity.y;
-errvz = 0 -velocity.z;
+errvx = -(host_mocapvel.twist.linear.x - 0);
+errvy = -(host_mocapvel.twist.linear.y - 0);
+errvz = -(host_mocapvel.twist.linear.z - 0);
 
 if(jumping_rope_control==false){
 sumx += KIx*errx*0.02;
@@ -275,18 +275,16 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>
-                                ("/drone3/mavros/state", 10, state_cb);
-    ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
-                                   ("/drone3/mavros/setpoint_position/local", 10);
+                                ("/drone3/mavros/state", 2, state_cb);
     //ros::Publisher mocap_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
     //                               ("/mavros/mocap/pose", 10);
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>
                                        ("/drone3/mavros/cmd/arming");
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
                                          ("/drone3/mavros/set_mode");
-    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody3/pose", 10, host_pos);
+    ros::Subscriber host_sub = nh.subscribe<geometry_msgs::PoseStamped>("/drone3/mavros/local_position/pose", 2, host_pos);
     ros::Publisher attitude_pub = nh.advertise<mavros_msgs::AttitudeTarget>("/drone3/mavros/setpoint_raw/attitude", 2);
-    ros::Subscriber host2_sub = nh.subscribe<geometry_msgs::TwistStamped>("/drone3/mavros/local_position/velocity", 1, host_vel);
+    ros::Subscriber host2_sub = nh.subscribe<geometry_msgs::TwistStamped>("/drone3/mavros/local_position/velocity_local", 2, host_vel);
     ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone3/mavros/imu/data", 1, imu_cb);
     ros::Subscriber ropea_sub = nh.subscribe<geometry_msgs::Point>("/leader_ukf/rope_theta", 2, rope_cb);
     ros::Publisher pos_pub = nh.advertise<geometry_msgs::Point>("/desired_position", 2);
@@ -296,6 +294,8 @@ int main(int argc, char **argv)
     ros::Publisher rope_energy_pub = nh.advertise<geometry_msgs::Point>("/rope_energy", 2);
     ros::Publisher trigger_pub = nh.advertise<geometry_msgs::Point>("/trigger", 2);
     // The setpoint publishing rate MUST be faster than 2Hz.
+    ros::AsyncSpinner spinner(2);
+    spinner.start();
     ros::Rate rate(50);
     double omega_n1, omega_n2;
     // Wait for FCU connection.
@@ -439,7 +439,7 @@ int main(int argc, char **argv)
         rope_control_input_pub.publish(rope_control_input);
         rope_energy_pub.publish(rope_energy);
         trigger_pub.publish(trigger_control);
-        ros::spinOnce();
+        //ros::spinOnce();
         rate.sleep();
     }
 

@@ -958,7 +958,7 @@ int main(int argc, char **argv)
 
                 //vir2.x = 0;
                     //vir2.y = -0.5;
-                vir2.z = -10;
+                vir2.z = 0;
                 //vir2.roll = 0;
                 landing = true;
                 velocity_circle = false;

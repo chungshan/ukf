@@ -170,6 +170,8 @@ int main(int argc, char **argv)
   double measure_ex, measure_ey, measure_ez;
   double sum_pwm;
   int count = 1;
+
+  //Measurement noise matrix
   Eigen::MatrixXd mnoise;
   mnoise.setZero(measurementsize,measurementsize);
   mnoise   = 3e-3*Eigen::MatrixXd::Identity(measurementsize , measurementsize);
@@ -188,15 +190,10 @@ int main(int argc, char **argv)
   mnoise(me_x,me_x) = 1;//1
   mnoise(me_y,me_y) = 1;
   mnoise(me_z,me_z) = 1;
-/*
-  mnoise(mq_x,mq_x) = 1e-2;
-  mnoise(mq_y,mq_y) = 1e-2;
-  mnoise(mq_z,mq_z) = 1e-2;
-  mnoise(mq_w,mq_w) = 1e-2;
-*/
+
   forceest1.set_measurement_noise(mnoise);
 
-
+//Process noise matrix
   Eigen::MatrixXd pnoise;
   pnoise.setZero(statesize,statesize);
   pnoise(p_x,p_x) = 1e-2;
@@ -227,7 +224,7 @@ int main(int argc, char **argv)
   forceest1.set_process_noise(pnoise);
 
 
-
+//Measurement matrix H
   Eigen::MatrixXd measurement_matrix;
   measurement_matrix.setZero(measurementsize,statesize);
 
@@ -245,20 +242,13 @@ int main(int argc, char **argv)
   measurement_matrix(momega_y,omega_y) = 1;
   measurement_matrix(momega_z,omega_z) = 1;
 
-  measurement_matrix(me_x,e_x) = 1;//1,調小，beta會劇烈震盪
+  measurement_matrix(me_x,e_x) = 1;//
   measurement_matrix(me_y,e_y) = 1;
   measurement_matrix(me_z,e_z) = 1;
 
-/*
-  measurement_matrix(mq_x,q_x) = 1;
-  measurement_matrix(mq_y,q_y) = 1;
-  measurement_matrix(mq_z,q_z) = 1;
-  measurement_matrix(mq_w,q_w) = 1;
-*/
-
-
 
   forceest1.set_measurement_matrix(measurement_matrix);
+
   int battery_flag2, battery_flag3;
   double start_time,ini_time;
   double m = 1.5;
@@ -309,9 +299,7 @@ int main(int argc, char **argv)
     double avg_Fz_7 = 0;
     double battery_dt;
     double rope_theta, rope_omega;
-    pose.x = drone2_pose.pose.position.x;
-    pose_pub.publish(pose);
-
+/*Calculate voltage decrement for determing the PWM to force model
     battery_dt = ros::Time::now().toSec() - ini_time;
     if(drone3_battery_flag == 1){
       drone3_initial_battery = battery.voltage;
@@ -328,7 +316,7 @@ int main(int argc, char **argv)
       start_time = ros::Time::now().toSec();
       battery_flag3 = 1;
     }
-
+*/
   if(drone2_imu.angular_velocity.x!=0 && drone2_pose.pose.position.x !=0 && drone2_vel.twist.linear.x !=0){
     if(rc_out.channels.size()!=0 && rc_out.channels[0] != 0){
 
@@ -338,6 +326,9 @@ int main(int argc, char **argv)
     pwm4 = rc_out.channels[3];
 
     }
+
+    //Thust model (convert PWM to force)
+    //For simulation, use drone_flag==2
 
 if(drone_flag==3){
   double b;
@@ -370,11 +361,8 @@ if(drone_flag==3){
   }
   battery_p.x = F1+F2+F3+F4;
 
-  /*
-  std::cout << "---b---" << std::endl;
-  std::cout << b << std::endl;
-*/
 }
+
 if(drone_flag==2){
   double a;
 
@@ -389,6 +377,7 @@ if(drone_flag==2){
   F3 = (9.74659*1e-4*(pwm4*pwm4) -1.90901*pwm4 + 915.60244)*9.8/1000; //up_down:265.7775
   F4 = (6.04312*1e-4*(pwm2*pwm2) -0.767787*pwm2 + 78.7524)*9.8/1000;
 */
+    /*
     battery_p.x = F1+F2+F3+F4;
     Eigen::Vector3d thrust_ve;
     Eigen::Vector3d thrust_vec;
@@ -400,6 +389,7 @@ if(drone_flag==2){
     thrust.y = F3;
     thrust.z = F4;
     thrust_pub.publish(thrust);
+    */
 /*
     if(battery_flag2 == 1){
 
@@ -412,33 +402,22 @@ if(drone_flag==2){
       battery_p.y = F1 + F2 + F3+ F4;
     }
 */
-    a = 3.065625*1000/9.8-8.1733*1e-4*(pwm1*pwm1)+1.2950*pwm1;//no payload
-    battery_pub.publish(battery_p);
     /*
     std::cout << "---a---" << std::endl;
     std::cout << a << std::endl;
 */
 }
-    forceest1.thrust = F1 + F2 + F3 + F4;
-    //forceest1.thrust = (F1 + F2 + F3 + F4)*1.5;
-    pwm.x = pwm1+pwm2+pwm3+pwm4;
-    sum_pwm =sum_pwm + pwm1+pwm2+pwm3+pwm4;
-    pwm.y = sum_pwm / count;
-    count = count + 1;
-    pwm.z = pwm3;
 
-    pwm_pub.publish(pwm);
-    /*
-    std::cout << "----------thrust-------" << std::endl;
-    std::cout << forceest1.thrust << std::endl;
-*/
+
     ROS_INFO("Thrust = %f", forceest1.thrust);
+   //Calculate thrust and torque
+    forceest1.thrust = F1 + F2 + F3 + F4;
     U_x = (sqrt(2)/2)*l*(F1 - F2 - F3 + F4);
     U_y = (sqrt(2)/2)*l*(-F1 - F2 + F3 + F4);
     U_z = k*F1 - k*F2 + k*F3 - k*F4;
     forceest1.U << U_x, U_y, U_z;
 
-    //gausian noise
+    //gausian noise for force model
     forceest1.gausian_noise << distx(generatorx), disty(generatory), distz(generatorz);
 
     std::cout << "----------Gausian noise------------" << std::endl;
@@ -447,26 +426,19 @@ if(drone_flag==2){
     double y = drone2_pose.pose.orientation.y;
     double z = drone2_pose.pose.orientation.z;
     double w = drone2_pose.pose.orientation.w;
-
+    //Rotation matrix
     forceest1.R_IB.setZero();
     forceest1.R_IB << w*w+x*x-y*y-z*z  , 2*x*y-2*w*z ,            2*x*z+2*w*y,
         2*x*y +2*w*z           , w*w-x*x+y*y-z*z    ,2*y*z-2*w*x,
         2*x*z -2*w*y          , 2*y*z+2*w*x        ,w*w-x*x-y*y+z*z;
+    //Angular velocity
     forceest1.angular_v_measure << drone2_imu.angular_velocity.x, drone2_imu.angular_velocity.y, drone2_imu.angular_velocity.z;
-
+    //***Predict***
     forceest1.predict();
 
+    //Put measurement
     Eigen::VectorXd measure;
     measure.setZero(measurementsize);
-
-
-    drone_vel.x = drone2_pose.pose.position.x;
-    drone_vel.y = drone2_vel.twist.linear.y;
-    drone_vel.z = drone2_vel.twist.linear.z;
-
-    drone_vel_pub.publish(drone_vel);
-
-
     measure << drone2_pose.pose.position.x, drone2_pose.pose.position.y, drone2_pose.pose.position.z,
                drone2_vel.twist.linear.x, drone2_vel.twist.linear.y, -drone2_vel.twist.linear.z,
                measure_ex, measure_ey, measure_ez,
@@ -476,6 +448,13 @@ if(drone_flag==2){
     forceest1.omega_bias(2) = gyro_bias.z;
     forceest1.quat_m << drone2_pose.pose.orientation.x, drone2_pose.pose.orientation.y, drone2_pose.pose.orientation.z, drone2_pose.pose.orientation.w;
     forceest1.qk11 = forceest1.qk1;
+
+    //***Correct***
+    forceest1.correct(measure);
+    forceest1.x[e_x] = 0;
+    forceest1.x[e_y] = 0;
+    forceest1.x[e_z] = 0;
+
 /*
     theta_q << forceest1.quaternion(3), -forceest1.quaternion(2), forceest1.quaternion(1),
                forceest1.quaternion(2), forceest1.quaternion(3), -forceest1.quaternion(0),
@@ -491,10 +470,8 @@ if(drone_flag==2){
     std::cout << "---y_k---" << std::endl;
     std::cout << y_k << std::endl;
 */
-    forceest1.correct(measure);
-    forceest1.x[e_x] = 0;
-    forceest1.x[e_y] = 0;
-    forceest1.x[e_z] = 0;
+
+
 /*
     std::cout << "--------" << std::endl;
 
@@ -531,15 +508,12 @@ if(drone_flag==2){
     std::cout << forceest1.x[beta_z] << std::endl;
 */
 
-    bias.x = forceest1.x[beta_x];
-    bias.y = forceest1.x[beta_y];
-    bias.z = forceest1.x[beta_z];
 
     /*
     bias.x = battery.voltage;
     */
 
-
+/*
     if(bias_flag == 1){
 
       sum_Fx = sum_Fx + forceest1.x[F_x];
@@ -559,7 +533,11 @@ if(drone_flag==2){
 
       }
     }
-
+*/
+    //Pub data
+    bias.x = forceest1.x[beta_x];
+    bias.y = forceest1.x[beta_y];
+    bias.z = forceest1.x[beta_z];
     bias_pub.publish(bias);
 
     euler.x = forceest1.euler_angle(0);//roll:forceest1.euler_angle(0)
@@ -590,20 +568,9 @@ if(drone_flag==2){
     force.z = forceest1.x[F_z] - bias_Fz_7;
     ROS_INFO("-------------------- Force ------------------");
     ROS_INFO("Fx = %f, Fy = %f, Fz = %f", force.x, force.y, force.z);
-    ROS_INFO("bias_Fx = %f, bias_Fy = %f, bias_Fz = %f", bias_Fx, bias_Fy_1, bias_Fz_7);
-    rope_theta = atan2(force.z,force.y);
-    rope_omega = (rope_theta - rope_theta_old)*30;
-    rope_theta_old = rope_theta;
-    rope_theta_v.x = rope_theta - 1.570796;
-    rope_theta_v.y = rope_omega;
-    rope_theta_v.z = rope_theta*180/3.1415926 - 90;
-    ROS_INFO("------------------- Rope -----------------");
-    ROS_INFO("rope_theta = %f, rope_omega = %f", rope_theta_v.x, rope_theta_v.y);
-    ROS_INFO("-------------------------------------------");
-    //rope_theta_pub.publish(rope_theta_v);
+
     force_nobias.x = forceest1.x[F_x];
     force_nobias.y = forceest1.x[F_y];
-
     force_nobias.z = forceest1.x[F_z];
     torque.z = forceest1.x[tau_z];
     torque_pub.publish(torque);

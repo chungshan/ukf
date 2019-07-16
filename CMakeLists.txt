@@ -174,6 +174,7 @@ add_executable(sim_two_drones src/sim_two_drones.cpp ${HEADERS_} ${SOURCES_})
 #add_executable(leader_follower_circle src/leader_follower_circle.cpp ${HEADERS_} ${SOURCES_})
 add_executable(force_estimatee src/force_estimate.cpp ${HEADERS_} ${SOURCES_})
 add_executable(sim_force_estimatee src/sim_force_estimate.cpp ${HEADERS_} ${SOURCES_})
+add_executable(angular_v_ctrl src/angular_v_ctrl.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -270,6 +271,9 @@ target_link_libraries(test_vv
     ${catkin_LIBRARIES}
 )
 target_link_libraries(sim_two_drones
+    ${catkin_LIBRARIES}
+)
+target_link_libraries(angular_v_ctrl
     ${catkin_LIBRARIES}
 )
 target_link_libraries(world_plugin ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})

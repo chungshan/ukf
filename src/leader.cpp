@@ -195,7 +195,7 @@ int main(int argc, char **argv)
     vs.twist.angular.y = 0;
     vs.twist.angular.z = 0;
 
-  vir1.x = 0.5;
+  vir1.x = 0.8;
   vir1.y = 0.0;
   vir1.z = 0.5;
   vir1.roll = 0;

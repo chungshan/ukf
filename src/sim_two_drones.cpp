@@ -31,7 +31,7 @@ lpf2 lpf2_uav1_alpha(10,0.0333);
 lpf2 lpf2_uav2_alpha(10,0.0333);
 lpf2 lpf2_uav1_omega(10,0.0333);
 lpf2 lpf2_uav2_omega(10,0.0333);
-bool jumping_rope_control = false, start_observer = false, apply_wrench_flag = false;
+bool swing_up_control = false, start_observer = false, apply_wrench_flag = false;
 
 //payload's imu cb
 sensor_msgs::Imu payload_imu;
@@ -195,9 +195,16 @@ void uav2_imu_cb(const sensor_msgs::Imu::ConstPtr& msg)
   uav2_acc_inertia = uav2_RIB*uav2_acc_body;
   uav2_acc_inertia(2) = uav2_acc_inertia(2) - 9.81;
 }
+
+geometry_msgs::Point groundtruth;
+void ground_cb(const geometry_msgs::Point::ConstPtr& msg)
+{
+  groundtruth = *msg;
+}
+
 typedef struct
 {
-    float roll;
+    float yaw;
     float x;
     float y;
     float z;
@@ -333,80 +340,101 @@ double KPx=5, KPy=5, KPz=0.5;
 double KVx=1.3, KVy=1.3, KVz=0.2;
 double KIx=0.33, KIy=0.33, KIz=0.05;
 double KPyaw = 1;
-double m_rope = 0.2;
-double limit_contol_factor = 0.1;
-
+double m_p = 0.5;//Payload's mass
+double limit_contol_factor = 0.2;//To limit the quadrotor's control input. a_lim = limit_contol_factor*0.4*g.
+double sw_Kpz = 40, sw_Kvz = 1.25;// Height control gain sw_Kpz = 25, sw_Kvz = 1.25
 double uav1_last_omega;
 double total_air;
-void follow_omega1(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped& host_mocapvel, mavros_msgs::AttitudeTarget* pose,double theta,double theta_2,double omega,double omega_2)
+double air_density = 1.2;
+
+double last_groundtruth_theta;
+void leader_controller(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped& host_mocapvel, mavros_msgs::AttitudeTarget* pose,double theta,double theta_2,double omega,double omega_2)
 {
-float errx, erry, errz, err_roll;
+float errx, erry, errz, err_yaw;
 float errvx , errvy ,errvz ;
-float ux, uy, uz, uroll, upitch, uyaw, uz_test;
-float ux_f, uy_f;
+float ux, uz;
 tf::Quaternion Q;
 double E,E_z, E_des, E_des_z;
-double J_rope, r_g;
+double J_p;
 const double g = 9.81;
 double omega_des;
-const double k_rope = 50;
 const double ng = 0.4*9.81;
-const double mp = 0.6;
-const double mq = 1.5;
-const double L = 0.5;
-double jumping_rope_uy;
 double alpha, alpha_filt;
-double uz_f;
-Eigen::Vector3d total_thrust;
 Eigen::Vector3d e3;
-std::vector<double> root_;
-double theta_des;
+double theta_des, theta_des_z;
 double E_dot_l;
-double theta_z;
+double theta_z, theta_n;
 double l_star;
 const double c_d = 0.82;
 const double Area = 1.5*0.05;
-double E_dot_comp;
-double theta_des_sign;
-double v_c;
+double theta_des_sign, theta_control_sign;
+double v_p;
 double uav1_omega_filt;
+double k_sw;
+double uz_l;
+double omega_ground_theta;
+
+omega_ground_theta = (groundtruth.z - last_groundtruth_theta)*30;
+last_groundtruth_theta = groundtruth.z;
+
 e3 << 0,0,1;
-r_g = 0.5;
-J_rope = m_rope * r_g * r_g;
-omega_des = g/r_g;
-theta_des = 135/57.29577951;
 l_star = 0.5;
-v_c = l_star*omega;
-E = m_rope*g*r_g*(cos(theta) - 1)  + 0.5*J_rope*(omega)*(omega);
-// + 0.5*J_rope*(omega)*(omega)
-//E = m_rope*g*l_star*(cos(theta) - 1);
+J_p = m_p * l_star * l_star;//Payload's inertia
+omega_des = g/l_star;
+theta_des = 135/57.29577951;
+v_p = l_star*omega;
+// + 0.5*J_p*(omega)*(omega)
+//E = m_p*g*l_star*(cos(theta) - 1);
+
+//Calculate angular acceleration
 uav1_omega_filt = lpf2_uav1_omega.filter(omega);
 alpha = (uav1_omega_filt - uav1_last_omega)*30;
 uav1_last_omega = uav1_omega_filt;
 
-alpha_filt = lpf2_uav1_alpha.filter(alpha);
-//E_des = 0.5*J_rope*omega_des;
-//E_des = 0;
-//E_des = m_rope*g*r_g*(cos(theta_des) - 1)+ 0.5*J_rope*(1.5*omega)*(1.5*omega);//for compress swinging motion
+alpha_filt = lpf2_uav1_alpha.filter(alpha);//Angular accleration of theta (second order low pass filter)
 
+//E_des = 0.5*J_p*omega_des;
+//E_des = 0;
+//E_des = m_p*g*l_star*(cos(theta_des) - 1)+ 0.5*J_p*(1.5*omega)*(1.5*omega);//for compress swinging motion
+
+//Conver theta = 0 at upright position to downward position
 theta_z = -(theta + pi);
+theta_des_z = pi - theta_des;
+
+//payload energy estimate
 if(omega>0){
   theta_des_sign = -1;
 }
 else{
   theta_des_sign = 1;
 }
-E_des = m_rope*g*l_star*(cos(theta_des) - 1) + 0.5*c_d*Area*1.2*v_c*v_c*l_star*(theta_des_sign*theta_des-theta);
-E_des_z = m_rope*g*l_star*(1-cos(pi-theta_des)) + 0.5*c_d*Area*1.2*v_c*v_c*l_star*(theta_des_sign*theta_des-theta);//for analysis only
-E_z = m_rope*g*l_star*(1-cos(theta_z)) + 0.5*J_rope*(omega)*(omega);//for analysis only
-E_dot_l = -m_rope*l_star*(-omega)*cos(theta_z)*uav1_acc_inertia(0)/2;
+//Convert theta to +pi ~ -pi
+if(theta > -pi){
+  theta_n = theta;
+}
+
+if(theta < -pi){
+  theta_n = (theta + 2*pi);
+}
+E = m_p*g*l_star*(cos(theta) - 1)  + 0.5*J_p*(omega)*(omega);
+E_des = m_p*g*l_star*(cos(theta_des) - 1) + 0.5*c_d*Area*air_density*v_p*v_p*l_star*(theta_des_z-theta_des_sign*theta_z);
+//E_des_z and E_z is only for analysis(theta = 0 at downward position).
+E_des_z = m_p*g*l_star*(1-cos(pi-theta_des)) + 0.5*c_d*Area*air_density*v_p*v_p*l_star*(theta_des_z-theta_des_sign*theta_z);
+E_z = m_p*g*l_star*(1-cos(theta_z)) + 0.5*J_p*(omega)*(omega);
+
+E_dot_l = -m_p*l_star*(-omega)*cos(theta_z)*uav1_acc_inertia(0)/2;
+
+//Publish data
 
 uav1_E_dot_hat_theta.x = E_des_z;
 uav1_E_dot_hat_theta.y = E_z;
-uav1_E_dot_hat_theta.z = E_des_z - E_z;
+uav1_E_dot_hat_theta.z = 0.5*J_p*(omega_ground_theta)*(omega_ground_theta) + m_p*g*l_star*(1-cos(groundtruth.z));
 
 uav1_theta.x = theta_z;
 uav1_theta.y = pi - theta_des;
+
+//Position, veloctiy error
+
 errx = -(host_mocap.pose.position.x - vir.x);
 erry = -(host_mocap.pose.position.y - vir.y);
 errz = -(host_mocap.pose.position.z - vir.z);
@@ -438,14 +466,17 @@ if(uav1_sumy>0.6){
 else if(uav1_sumy<-0.6){
   uav1_sumy = -0.6;
 }
-err_roll = vir.roll - uav1_yaw;
-if(err_roll>pi)
-err_roll = err_roll - 2*pi;
-else if(err_roll<-pi)
-err_roll = err_roll + 2*pi;
+err_yaw = vir.yaw - uav1_yaw;
+if(err_yaw>pi)
+err_yaw = err_yaw - 2*pi;
+else if(err_yaw<-pi)
+err_yaw = err_yaw + 2*pi;
 
-//ROS_INFO("err: x = %.3f, y = %.3f, z = %.3f, yaw = %.3f",errx,erry,errz,err_roll);
+//ROS_INFO("err: x = %.3f, y = %.3f, z = %.3f, yaw = %.3f",errx,erry,errz,err_yaw);
 //ROS_INFO("err: %.3f,%.3f,%.3f",errvx,errvy,errvz);
+
+//Geometric controller for position control
+
 Eigen::Vector3d att_rate_global;
 Eigen::Vector3d att_rate_body;
 Eigen::Vector3d g_;
@@ -458,6 +489,68 @@ Eigen::Vector4d cmdbodyrate_;
 
  a_fb <<  6*errx + 1.5*errvx + uav1_sumx, 6*erry + 1.5*errvy+ uav1_sumy, 10*errz + 3.33*errvz;
  a_ref << 0, 0, 0;
+
+ //Swing-up controller
+
+ if(swing_up_control == true){
+   //ux = 0.4*(E-E_des)*omega*cos(theta) + 0.1 * copysign(1,host_mocap.pose.position.x) * log(1-fabs(host_mocap.pose.position.x)/1);
+
+   k_sw = 4;
+   /*Test for limited path
+   if(host_mocap.pose.position.x < -0.5 && host_mocap.pose.position.x > -1){
+     if(omega*cos(theta) < 0){
+     k_sw = 4*(1-log(1-fabs(host_mocap.pose.position.x)/1));
+     }else{
+       k_sw = 4*(log(fabs(host_mocap.pose.position.x)/1));
+     }
+     k_sw = fabs(k_sw);
+   }else if(host_mocap.pose.position.x < -1){
+     if(omega*cos(theta) < 0){
+     k_sw = 4*(log(fabs(host_mocap.pose.position.x)/1-1));
+     }else{
+       k_sw = 4*(log(fabs(host_mocap.pose.position.x)/1));
+     }
+     k_sw = fabs(k_sw);
+   }
+ */
+   double k_a = air_density*c_d*Area;
+   double k = 0.8;
+   //leader's swing-up controller
+   if(omega>0){
+     theta_control_sign = 1;
+   }
+   else{
+     theta_control_sign = 0;
+   }
+
+
+   ux = k_sw*(E-E_des)*omega*cos(theta) - 2*k_a*(l_star*l_star*alpha*(theta_des_z-theta_des_sign*theta_z) - theta_control_sign*v_p*v_p)/((1+k)*m_p*cos(theta));
+   //saturation function
+   if(ux > limit_contol_factor*ng){
+     ux =  limit_contol_factor*ng;
+   }
+   if(ux < - limit_contol_factor*ng){
+     ux =  - limit_contol_factor*ng;
+   }
+/*
+   ROS_INFO("ux = %f", ux);
+   ROS_INFO("====end====");
+   */
+
+   //height controller
+   //uz = - 0*(0.5*m_p)*l_star*alpha_filt*sin(theta) - 0.5*(0.5*m_p)*l_star*uav1_omega_filt*uav1_omega_filt*cos(theta);
+
+   //Admittance controller
+   double M = 2;
+   uz_l = (uav1_force_est.z + sw_Kpz*errz + sw_Kvz*errvz)/M;
+   //uz_l = (3*errz + 0.3*errvz);Without height control
+   a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 0;//10*errz + 3.33*errvz (without using heigh control, these control gains also have a good performance)
+   a_ref << ux, 0, uz_l;//
+
+   uav1_control_input.x = ux;
+   uav1_control_input.z = uz_l;
+ }
+ //Geometric controller: Conver acceleration command to body rate and thrust command
  a_des << a_ref + a_fb - g_;
  q_des = acc2quaternion(a_des,uav1_yaw);
  cmdbodyrate_ = attcontroller(q_des,a_des,uav1_mavatt_);
@@ -466,116 +559,91 @@ Eigen::Vector4d cmdbodyrate_;
  pose->body_rate.z = cmdbodyrate_(2);
  pose->thrust = cmdbodyrate_(3);
 
- //ROS_INFO("u: %.4f,%.4f,%.4f,%.4f",cmdbodyrate_(0),cmdbodyrate_(1),cmdbodyrate_(2),cmdbodyrate_(3));
- if(jumping_rope_control == true){
-   //ux = 0.4*(E-E_des)*omega*cos(theta) + 0.1 * copysign(1,host_mocap.pose.position.x) * log(1-fabs(host_mocap.pose.position.x)/1);
-   E_dot_comp = 0.5*c_d*Area*1.2*v_c*v_c*v_c;
-   ux = 4*(E-E_des)*omega*cos(theta) + c_d*Area*1.2*l_star*theta_z*l_star*(-omega)/(m_rope*l_star*(-omega)*cos(theta_z));
-   ROS_INFO("test = %f", c_d*Area*1.2*l_star*theta_z*l_star*(-omega)/(m_rope*l_star*(-omega)*cos(theta_z)));
-   if(ux > limit_contol_factor*ng){
-     ux =  limit_contol_factor*ng;
-   }
-   if(ux < - limit_contol_factor*ng){
-     ux =  - limit_contol_factor*ng;
-   }
-   uz = - 0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) - 0.5*(0.5*m_rope)*l_star*uav1_omega_filt*uav1_omega_filt*cos(theta);
-   //5*errz + 1.33*errvz;
-   a_fb <<  0, 9*erry + 2.25*errvy+ uav1_sumy, 5*errz + 1.33*errvz;
-   a_ref << ux, 0,0;//uz/1.5
-   a_des << a_ref + a_fb - g_;
-   q_des = acc2quaternion(a_des,uav1_yaw);
-   cmdbodyrate_ = attcontroller(q_des,a_des,uav1_mavatt_);
-   pose->body_rate.x = cmdbodyrate_(0);
-   pose->body_rate.y = cmdbodyrate_(1);
-   pose->body_rate.z = cmdbodyrate_(2);
-   pose->thrust = cmdbodyrate_(3);
-   uav1_control_input.x = ux;
-   uav1_control_input.z = uz/1.5;
- }
-
-
 
 }
 double uav2_sumx,uav2_sumy,uav2_sumz;
 double E_theta_hat_last, E_theta_hat_last_psi;
 double a_f_theta_filt;
-double uav2_last_omega;
+double uav2_last_omega, last_groundtruth_psi;
 
-void follow_omega2(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped& host_mocapvel, mavros_msgs::AttitudeTarget* pose,double theta,double theta_psi,double omega,double omega_psi)
+void follower_controller(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped& host_mocapvel, mavros_msgs::AttitudeTarget* pose,double theta,double theta_psi,double omega,double omega_psi)
 {
-float errx, erry, errz, err_roll;
+float errx, erry, errz, err_yaw;
 float errvx , errvy ,errvz ;
-float ux, uy, uz, uroll, upitch, uyaw, uz_test;
-float ux_f, uy_f;
-tf::Quaternion Q;
-double E, E_des;
-double J_rope, r_g;
+float ux;
+double E;
+double J_p, l_star;
 const double g = 9.81;
 double omega_des;
-const double k_rope = 50;
 const double ng = 0.4*9.81;
-const double mp = 0.6;
-const double mq = 1.5;
-const double L = 0.5;
-double jumping_rope_uy;
 double uz_f;
-Eigen::Vector3d total_thrust;
 Eigen::Vector3d e3;
-std::vector<double> root_;
 double phi_theta;
-double E_dot_f,E_dot_f_psi, E_dot_l, E_dot_l_psi;
-double E_theta_hat, E_uav2_theta_hat_psi, E_uav2_theta_hat_psi_filt;
-double E_theta_hat_dot, E_theta_hat_dot_psi;
-double l_star;
+double E_dot_f,E_dot_f_psi, E_dot_l;
+double E_theta_hat, E_uav2_theta_hat_psi;
+double E_theta_hat_dot;
 double dt;
-double E_theta_hat_dot_filt, E_dot_f_filt, E_theta_hat_dot_filt_psi, E_dot_f_filt_psi, E_psi_filt;
-double delta_E_psi, copysign_;
-double E_dot_comp;
+double E_theta_hat_dot_filt, E_dot_f_filt,E_psi_filt;
+double delta_E_psi;
+double E_dot_AD;
 const double c_d = 0.82;
 const double Area = 1.5*0.05;
-double v_c;
+double v_p;
 double alpha, alpha_filt;
 double uav2_omega_filt;
+double omega_ground_psi;
+double F_AD;
+double E_psi_meas;
+//Ground truth for theta_psi and omega_psi
+//theta_psi = groundtruth.x;
+omega_ground_psi = (groundtruth.x - last_groundtruth_psi)*30;
+last_groundtruth_psi = groundtruth.x;
+uav2_psi_hat.z = omega_ground_psi;
+/*
+omega_psi = -omega_ground_psi;
+*/
 dt = 0.03333;
 e3 << 0,0,1;
-r_g = 0.51;
 l_star = 0.50;
-J_rope = m_rope * r_g * r_g;
-omega_des = g/r_g;
-E = 0.5*J_rope*omega*omega + m_rope*g*r_g*(cos(theta) - 1);
-//E_des = 0.5*J_rope*omega_des;
-E_des = 0;
-v_c = l_star*omega;
-E_dot_comp = 0.5*c_d*Area*1.2*v_c*v_c*v_c;
+J_p = m_p * l_star * l_star;
+
+//E_dot_AD
+v_p = l_star*omega;
+F_AD = 0.5*c_d*Area*air_density*v_p*v_p;
+E_dot_AD = F_AD * l_star*omega;
+
+//Angular accleration calculate
 uav2_omega_filt = lpf2_uav2_omega.filter(omega);
 alpha = (uav2_omega_filt - uav2_last_omega)*30;
 uav2_last_omega = uav2_omega_filt;
 alpha_filt = lpf2_uav2_alpha.filter(alpha);
-//For theta oscillation
-E_dot_f = -m_rope*l_star*omega*cos(theta)*uav2_acc_inertia(0)/2;
-E_theta_hat = 0.5*m_rope*l_star*l_star*omega*omega + m_rope*g*l_star*(1-cos(theta));
+
+//Estimate leader's energy rate
+E_dot_f = -m_p*l_star*omega*cos(theta)*uav2_acc_inertia(0)/2;
+E_theta_hat = 0.5*m_p*l_star*l_star*omega*omega + m_p*g*l_star*(1-cos(theta));
 E_theta_hat_dot = (E_theta_hat- E_theta_hat_last)/dt;
 E_theta_hat_dot_filt = lpf2_E_hat_dot.filter(E_theta_hat_dot);
 E_dot_f_filt = lpf2_E_f_dot.filter(E_dot_f);
-E_dot_l = E_theta_hat_dot_filt - E_dot_f_filt + E_dot_comp;
+E_dot_l = E_theta_hat_dot_filt - E_dot_f_filt + E_dot_AD;
 E_theta_hat_last = E_theta_hat;
-//For psi oscillation
-E_dot_f_psi = -m_rope*omega_psi*cos(theta_psi)*uav2_acc_inertia(0)/2;
-E_uav2_theta_hat_psi = 0.5*m_rope*l_star*l_star*omega_psi*omega_psi + m_rope*g*l_star*(1-cos(theta_psi));
+
+//Esimtae psi energy of payload
+E_dot_f_psi = -m_p*omega_psi*cos(theta_psi)*uav2_acc_inertia(0)/2;
+E_uav2_theta_hat_psi = 0.5*m_p*l_star*l_star*omega_psi*omega_psi + m_p*g*l_star*(1-cos(theta_psi));
 E_psi_filt = lpf2_E_psi.filter(E_uav2_theta_hat_psi);
 //E_theta_hat_dot_psi = (E_uav2_theta_hat_psi- E_theta_hat_last_psi)/dt;
 //E_theta_hat_dot_filt_psi = lpf2_E_hat_dot_psi.filter(E_theta_hat_dot_psi);
 //E_dot_f_filt_psi = lpf2_E_f_dot_psi.filter(E_dot_f_psi);
 //E_dot_l_psi = E_theta_hat_dot_filt_psi - E_dot_f_filt_psi;
 //E_theta_hat_last_psi = E_uav2_theta_hat_psi;
-
-//Store variable to topic
+E_psi_meas = 0.5*m_p*l_star*l_star*omega_ground_psi*omega_ground_psi + m_p*g*l_star*(1-cos(groundtruth.x));
+//Publish data
 
 uav2_E_dot_hat_theta.x = E_dot_l;
-uav2_E_dot_hat_theta.y = E_theta_hat_dot_filt;
+uav2_E_dot_hat_theta.y = E_psi_meas;
+uav2_E_dot_hat_theta.z = E_psi_filt;
 
-
-//position control
+//position and velocity error
 
 errx = -(host_mocap.pose.position.x - vir.x);
 erry = -(host_mocap.pose.position.y - vir.y);
@@ -607,16 +675,14 @@ if(uav2_sumy>0.6){
 else if(uav2_sumy<-0.6){
   uav2_sumy = -0.6;
 }
-err_roll = vir.roll - uav2_yaw;
-if(err_roll>pi)
-err_roll = err_roll - 2*pi;
-else if(err_roll<-pi)
-err_roll = err_roll + 2*pi;
+err_yaw = vir.yaw - uav2_yaw;
+if(err_yaw>pi)
+err_yaw = err_yaw - 2*pi;
+else if(err_yaw<-pi)
+err_yaw = err_yaw + 2*pi;
 
-//ROS_INFO("err: x = %.3f, y = %.3f, z = %.3f, yaw = %.3f",errx,erry,errz,err_roll);
-//ROS_INFO("err: %.3f,%.3f,%.3f",errvx,errvy,errvz);
-Eigen::Vector3d att_rate_global;
-Eigen::Vector3d att_rate_body;
+//Geometri controller for position control
+
 Eigen::Vector3d g_;
 g_ << 0,0,-9.8;
 Eigen::Vector3d a_des;
@@ -624,21 +690,16 @@ Eigen::Vector3d a_ref;
 Eigen::Vector3d a_fb;
 Eigen::Vector4d q_des;
 Eigen::Vector4d cmdbodyrate_;
-if(jumping_rope_control == false){
+if(swing_up_control == false){
  a_fb <<  6*errx + 1.5*errvx + uav2_sumx, 6*erry + 1.5*errvy+ uav2_sumy, 10*errz + 3.33*errvz;
  a_ref << 0, 0, 0;
- a_des << a_ref + a_fb - g_;
- q_des = acc2quaternion(a_des,uav2_yaw);
- cmdbodyrate_ = attcontroller(q_des,a_des,uav2_mavatt_);
- pose->body_rate.x = cmdbodyrate_(0);
- pose->body_rate.y = cmdbodyrate_(1);
- pose->body_rate.z = cmdbodyrate_(2);
- pose->thrust = cmdbodyrate_(3);
 }
  //ROS_INFO("u: %.4f,%.4f,%.4f,%.4f",cmdbodyrate_(0),cmdbodyrate_(1),cmdbodyrate_(2),cmdbodyrate_(3));
 
-if(jumping_rope_control == true){
-  double omega_zero_theta,omega_zero_psi, omega_theta,omega_psi_n,phi_psi, delta_u, delta_l, a_dis,a_dis_psi, a_f_theta, r_A1_theta, r_A1_psi;
+//Follower's controller
+
+if(swing_up_control == true){
+  double omega_zero_theta,omega_zero_psi, omega_theta,omega_psi_n,phi_psi, delta_u, delta_l, a_dis,a_dis_psi, a_f_theta, ux_theta, ux_psi;
   omega_zero_theta = sqrt(g/l_star);
   omega_zero_psi = 2*omega_zero_theta;
   omega_theta = omega_zero_theta*(1-(fabs(theta))/pi);
@@ -646,14 +707,54 @@ if(jumping_rope_control == true){
   delta_u = 0.1;
   delta_l = -0.1;
   a_f_theta = 4;
-  //For theta-oscillation
+
+  //For theta-control
+
   if(E_dot_l > delta_u){
+/*Test for limited path
+    if(host_mocap.pose.position.x < -0.1 && host_mocap.pose.position.x > -1){
+
+      if(omega_theta*omega_theta*sin(phi_theta) > 0){
+      a_f_theta = 40*(1-log(1-fabs(host_mocap.pose.position.x)/1));
+      }else{
+        a_f_theta = 0.4*(log(fabs(host_mocap.pose.position.x)/1));
+      }
+      a_f_theta = fabs(a_f_theta);
+
+    }else if(host_mocap.pose.position.x < -1){
+      if(omega_theta*omega_theta*sin(phi_theta) > 0){
+        a_f_theta = 40*(log(fabs(host_mocap.pose.position.x)/1-1));
+      }else{
+        a_f_theta = 0.4*(log(fabs(host_mocap.pose.position.x)/1));
+      }
+      a_f_theta = fabs(a_f_theta);
+    }
+*/
     a_dis = a_f_theta;
   }else if(E_dot_l < delta_l){
+/*Test for limited path
+    if(host_mocap.pose.position.x < -0.1 && host_mocap.pose.position.x > -1){
+      if(omega_theta*omega_theta*sin(phi_theta) < 0){
+      a_f_theta = 40*(1-log(1-fabs(host_mocap.pose.position.x)/1));
+      }else{
+        a_f_theta = 0.4*(log(fabs(host_mocap.pose.position.x)/1));
+      }
+      a_f_theta = fabs(a_f_theta);
+
+    }else if(host_mocap.pose.position.x < -1){
+      if(omega_theta*omega_theta*sin(phi_theta) < 0){
+        a_f_theta = 40*(log(fabs(host_mocap.pose.position.x)/1-1));
+      }else{
+        a_f_theta = 0.4*(log(fabs(host_mocap.pose.position.x)/1));
+      }
+      a_f_theta = fabs(a_f_theta);
+    }
+*/
     a_dis = -a_f_theta;
   }else{
     a_dis = 0;
   }
+  /*Test for limited path
   if((a_dis - a_f_theta_filt) == 0){
     copysign_ = 0;
   }else
@@ -661,55 +762,84 @@ if(jumping_rope_control == true){
     copysign_ = copysign(1,a_dis - a_f_theta_filt);
   }
   a_f_theta_filt = a_f_theta_filt + dt*(10*copysign_);
-  //ROS_INFO("a_f_theta_filt = %f", a_f_theta_filt);//s
-  r_A1_theta = a_dis*omega_theta*omega_theta*sin(phi_theta);
-  if(r_A1_theta > limit_contol_factor*0.5*ng){
-    r_A1_theta = limit_contol_factor*0.5*ng;
+  */
+
+  ux_theta = a_dis*omega_theta*omega_theta*sin(phi_theta);
+
+  if(ux_theta > limit_contol_factor*0.5*ng){
+    ux_theta = limit_contol_factor*0.5*ng;
   }
-  if(r_A1_theta < -limit_contol_factor*0.5*ng){
-    r_A1_theta = -limit_contol_factor*0.5*ng;
+  if(ux_theta < -limit_contol_factor*0.5*ng){
+    ux_theta = -limit_contol_factor*0.5*ng;
   }
-  //ROS_INFO("uav2_r_A1_theta = %f", r_A1_theta);
-  //For psi-oscillation
+
+//ROS_INFO("x = %f, ux_theta = %f, a_dis = %f", host_mocap.pose.position.x, ux_theta, a_dis);
+  //For psi-control
   phi_psi = atan2(-omega_psi/omega_zero_psi, theta_psi);
   omega_psi_n = omega_zero_psi*(1-(fabs(theta_psi))/pi);
   delta_E_psi = 0 - E_psi_filt;
-  if(fabs(delta_E_psi) > 0.25){
+/*Test for limited path
+  if(host_mocap.pose.position.x < -0.1 && host_mocap.pose.position.x > -1){
+    ROS_INFO("=====x < -0.1 =====");
+    if(omega_psi_n*omega_psi_n*sin(phi_psi) < 0){
+    a_f_theta = 40*(1-log(1-fabs(host_mocap.pose.position.x)/1));
+    }else{
+      a_f_theta = 0.4*(log(fabs(host_mocap.pose.position.x)/1));
+    }
+    a_f_theta = fabs(a_f_theta);
+
+  }else if(host_mocap.pose.position.x < -1){
+    ROS_INFO("=====x < -1 =====");
+    if(omega_psi_n*omega_psi_n*sin(phi_psi) < 0){
+    a_f_theta = 40*(log(fabs(host_mocap.pose.position.x)/1-1));
+    //a_f_theta = 40;
+    }else{
+      a_f_theta = 0.4*(log(fabs(host_mocap.pose.position.x)/1));
+    //a_f_theta = 0.4;
+    }
+    a_f_theta = fabs(a_f_theta);
+  }
+*/
+  a_f_theta = 4;
+
+  if(fabs(delta_E_psi) > 0.5){//0.25
     a_dis_psi =a_f_theta*copysign(1,delta_E_psi);//Always negative
   }else{
-    a_dis_psi = (a_f_theta/0.25)*delta_E_psi;
+    a_dis_psi = (a_f_theta/0.5)*delta_E_psi;
   }
-  r_A1_psi = a_dis_psi*omega_psi_n*omega_psi_n*sin(phi_psi);//probelm in sin(phi_psi), the psi_omega is inaccurate.
-  //ROS_INFO("uav2_r_A1_psi = %f", r_A1_psi);
-      //ux = 0.4*(E-E_des)*omega*cos(theta);
+  ux_psi = a_dis_psi*omega_psi_n*omega_psi_n*sin(phi_psi);//probelm in sin(phi_psi), the psi_omega is inaccurate.
 
-  ux = r_A1_theta + r_A1_psi;
+  ux = ux_theta + ux_psi;
+  //ux = 2*ux_theta + 0*ux_psi;//without psi control
+
   if(ux > limit_contol_factor*ng){
     ux =  limit_contol_factor*ng;
   }
   if(ux < - limit_contol_factor*ng){
     ux =  - limit_contol_factor*ng;
   }
-  uz = -0*(0.5*m_rope)*l_star*alpha_filt*sin(theta) + 0.5*(0.5*m_rope)*l_star*uav2_omega_filt*uav2_omega_filt*cos(theta);
 
-  //ROS_INFO("uav2_ux = %f", ux);
-  a_fb <<  0, 9*erry + 2.25*errvy+ uav2_sumy, 5*errz + 1.33*errvz;
-  a_ref << ux, 0, 0;
-  a_des << a_ref + a_fb - g_;
-  q_des = acc2quaternion(a_des,uav2_yaw);
-  cmdbodyrate_ = attcontroller(q_des,a_des,uav2_mavatt_);
-  pose->body_rate.x = cmdbodyrate_(0);
-  pose->body_rate.y = cmdbodyrate_(1);
-  pose->body_rate.z = cmdbodyrate_(2);
-  pose->thrust = cmdbodyrate_(3);
-  uav2_control_input.x = E_dot_f;
-  uav2_control_input.y = theta;
-  uav2_control_input.z = uav2_acc_inertia(0);
+  //Height controller
+  //uz = -0*(0.5*m_p)*l_star*alpha_filt*sin(theta) + 0.5*(0.5*m_p)*l_star*uav2_omega_filt*uav2_omega_filt*cos(theta);
+  //Admittance control
+  double M = 2;
+  uz_f = (uav2_force_est.z + sw_Kpz*errz + 0.8*sw_Kvz*errvz)/M;
+  //uz_f = (3*errz + 0.3*errvz);without height control
+  a_fb <<  0, 9*erry + 2.25*errvy+ uav2_sumy, 0;
+  a_ref << ux, 0, uz_f;
+  uav2_control_input.x = theta_psi;
+  uav2_control_input.y = omega_psi;
+  uav2_control_input.z = ux_psi;
   //ROS_INFO("phi_psi = %f", phi_psi);
-
-  uav2_psi_hat.z = cmdbodyrate_(3);
 }
-
+//Geometric controller: Convert accleration command to body rate and thrust command
+a_des << a_ref + a_fb - g_;
+q_des = acc2quaternion(a_des,uav2_yaw);
+cmdbodyrate_ = attcontroller(q_des,a_des,uav2_mavatt_);
+pose->body_rate.x = cmdbodyrate_(0);
+pose->body_rate.y = cmdbodyrate_(1);
+pose->body_rate.z = cmdbodyrate_(2);
+pose->thrust = cmdbodyrate_(3);
 
 }
 //non-linear observer
@@ -728,15 +858,19 @@ Eigen::Vector2d non_linear_observer(Eigen::Vector2d& x, double& y)
   Eigen::Vector2d f_x;
   double g;
   double l_star;
-
+  double v_p;
+  double F_AD;
+  double Area = 1.5*0.05;
   g = -9.81;
   l_star = 0.50;
+  v_p = l_star*x(1);
+  F_AD = 0.5*1.2*v_p*v_p*0.82*Area;
   dt = 0.0333;
   //L_theta << 4.669, 2;//For force sensor
-  L_theta << 4.669, 1;
+  L_theta << 4.669, 0.8;//4.669, 0.8(First:Too small diverge, second: too large (>1) diverge
   C << 1, 0;
   y_hat = (C.transpose()*x).value();
-  f_x << x(1), -g/l_star*sin(x(0));
+  f_x << x(1), -g/l_star*sin(x(0));//-F_AD/(m_p*l_star)
   //- 1/l_star*cos(x(0))*(uav1_control_input.x+uav2_control_input.x)/2
   // - 1/l_star*cos(x(0))*(uav1_acc_inertia(0)+uav2_acc_inertia(0))/2
   //ROS_INFO("y = %f, x_hat = %f", y, x(0));
@@ -773,31 +907,33 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "sim_two_drones");
   ros::NodeHandle nh;
   //uav1
-  ros::Subscriber uav1_state_sub = nh.subscribe<mavros_msgs::State>
-                              ("/uav1/mavros/state", 10, uav1_state_cb);
-  ros::ServiceClient uav1_arming_client = nh.serviceClient<mavros_msgs::CommandBool>
-                                     ("/uav1/mavros/cmd/arming");
-  ros::ServiceClient uav1_set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
-                                       ("/uav1/mavros/set_mode");
+  ros::Subscriber uav1_state_sub = nh.subscribe<mavros_msgs::State>("/uav1/mavros/state", 2, uav1_state_cb);
+  ros::ServiceClient uav1_arming_client = nh.serviceClient<mavros_msgs::CommandBool>("/uav1/mavros/cmd/arming");
+  ros::ServiceClient uav1_set_mode_client = nh.serviceClient<mavros_msgs::SetMode>("/uav1/mavros/set_mode");
   ros::Subscriber uav1_pos_sub = nh.subscribe<geometry_msgs::PoseStamped>("/uav1/mavros/local_position/pose", 10, uav1_host_pos);
   ros::Publisher uav1_attitude_pub = nh.advertise<mavros_msgs::AttitudeTarget>("/uav1/mavros/setpoint_raw/attitude", 2);
-  ros::Subscriber uav1_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("/uav1/mavros/local_position/velocity_local", 1, uav1_host_vel);
+  ros::Subscriber uav1_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("/uav1/mavros/local_position/velocity_local", 2, uav1_host_vel);
   //uav2
-  ros::Subscriber uav2_state_sub = nh.subscribe<mavros_msgs::State>
-                              ("/uav2/mavros/state", 10, uav2_state_cb);
-  ros::ServiceClient uav2_arming_client = nh.serviceClient<mavros_msgs::CommandBool>
-                                     ("/uav2/mavros/cmd/arming");
-  ros::ServiceClient uav2_set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
-                                       ("/uav2/mavros/set_mode");
+  ros::Subscriber uav2_state_sub = nh.subscribe<mavros_msgs::State>("/uav2/mavros/state", 2, uav2_state_cb);
+  ros::ServiceClient uav2_arming_client = nh.serviceClient<mavros_msgs::CommandBool>("/uav2/mavros/cmd/arming");
+  ros::ServiceClient uav2_set_mode_client = nh.serviceClient<mavros_msgs::SetMode>("/uav2/mavros/set_mode");
   ros::Subscriber uav2_pos_sub = nh.subscribe<geometry_msgs::PoseStamped>("/uav2/mavros/local_position/pose", 10, uav2_host_pos);
   ros::Publisher uav2_attitude_pub = nh.advertise<mavros_msgs::AttitudeTarget>("/uav2/mavros/setpoint_raw/attitude", 2);
-  ros::Subscriber uav2_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("/uav2/mavros/local_position/velocity_local", 1, uav2_host_vel);
-  ros::Subscriber uav1_force_sub = nh.subscribe<geometry_msgs::Point>("/uav1/ttt", 1, uav1_force_cb);
-  ros::Subscriber uav2_force_sub = nh.subscribe<geometry_msgs::Point>("/uav2/qqq", 1, uav2_force_cb);
-  ros::Publisher uav1_rope_angle_pub = nh.advertise<geometry_msgs::Point>("/uav1rope_angle", 2);
-  ros::Publisher uav2_rope_angle_pub = nh.advertise<geometry_msgs::Point>("/uav2rope_angle2", 2);
+  ros::Subscriber uav2_vel_sub = nh.subscribe<geometry_msgs::TwistStamped>("/uav2/mavros/local_position/velocity_local", 2, uav2_host_vel);
+  //Force sub (force estimate and force sensor)
+  ros::Subscriber uav1_force_sub = nh.subscribe<geometry_msgs::Point>("/uav1/force_nobias", 2, uav1_force_cb);
+  ros::Subscriber uav2_force_sub = nh.subscribe<geometry_msgs::Point>("/uav2/force_nobias", 2, uav2_force_cb);
   ros::Subscriber uav1_wrench_sub = nh.subscribe<geometry_msgs::WrenchStamped>("/uav1_ft_sensor", 2, uav1_wrench_cb);
   ros::Subscriber uav2_wrench_sub = nh.subscribe<geometry_msgs::WrenchStamped>("/uav2_ft_sensor", 2, uav2_wrench_cb);
+  //IMU sub
+  ros::Subscriber uav2_imu_sub = nh.subscribe<sensor_msgs::Imu>("/uav2/mavros/imu/data",2,uav2_imu_cb);
+  ros::Subscriber uav1_imu_sub = nh.subscribe<sensor_msgs::Imu>("/uav1/mavros/imu/data",2,uav1_imu_cb);
+  //Ground truth sub
+  ros::Subscriber theta_ground_sub = nh.subscribe<geometry_msgs::Point>("/theta_groundtruth", 2, ground_cb);
+  //Data pub
+  ros::Publisher uav1_rope_angle_pub = nh.advertise<geometry_msgs::Point>("/uav1rope_angle", 2);
+  ros::Publisher uav2_rope_angle_pub = nh.advertise<geometry_msgs::Point>("/uav2rope_angle2", 2);
+
   ros::Publisher uav2_theta_hat_pub = nh.advertise<geometry_msgs::Point>("/uav2_theta_hat", 2);
   ros::Publisher uav2_theta_hat_meas_pub = nh.advertise<geometry_msgs::Point>("/uav2_theta_hat_meas", 2);
   ros::Publisher uav2_psi_hat_pub = nh.advertise<geometry_msgs::Point>("/uav2_psi_hat", 2);
@@ -806,14 +942,15 @@ int main(int argc, char **argv)
   ros::Publisher uav2_E_dot_hat_theta_pub = nh.advertise<geometry_msgs::Point>("/uav2_E_dot_hat_theta", 2);
   ros::Publisher uav2_control_input_pub = nh.advertise<geometry_msgs::Point>("/uav2_control_input", 2);
   ros::Publisher uav1_E_dot_hat_theta_pub = nh.advertise<geometry_msgs::Point>("/uav1_E_dot_hat_theta", 2);
-  ros::Subscriber uav2_imu_sub = nh.subscribe<sensor_msgs::Imu>("/uav2/mavros/imu/data",2,uav2_imu_cb);
-  ros::Subscriber uav1_imu_sub = nh.subscribe<sensor_msgs::Imu>("/uav1/mavros/imu/data",2,uav1_imu_cb);
+
   ros::Publisher uav1_theta_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta", 2);
   ros::Publisher uav1_theta_hat_1_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta_hat_1", 2);
   ros::Publisher uav1_theta_hat_1_meas_pub = nh.advertise<geometry_msgs::Point>("/uav1_theta_hat_1_meas", 2);
   ros::Publisher uav1_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav1_pose", 2);
   ros::Publisher uav2_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav2_pose", 2);
   ros::Publisher uav1_control_input_pub = nh.advertise<geometry_msgs::Point>("uav1_control_input", 2);
+
+  //Apply force service
   ros::ServiceClient apply_force_client = nh.serviceClient<gazebo_msgs::ApplyBodyWrench>("/gazebo/apply_body_wrench");
 
   ros::Rate rate(30);
@@ -822,21 +959,22 @@ int main(int argc, char **argv)
       ros::spinOnce();
       rate.sleep();
   }
-
+ //Set initial desired position
   vir vir1;
 
   vir1.x = 0.0;
   vir1.y = 0.4;
   vir1.z = 1.0;
-  vir1.roll = 0;
+  vir1.yaw = 0;
 
   vir vir2;
 
   vir2.x = 0.0;
   vir2.y = -0.4;
   vir2.z = 1.0;
-  vir2.roll = 0;
+  vir2.yaw = 0;
 
+  //Initialization of body rate and thrust command
   mavros_msgs::AttitudeTarget uav1_pose, uav2_pose;
 
   uav1_pose.thrust = 0;
@@ -860,7 +998,7 @@ int main(int argc, char **argv)
       ros::spinOnce();
       rate.sleep();
   }
-
+ //Set mode to OFFBOARD and arming
  mavros_msgs::SetMode uav1_offb_set_mode, uav2_offb_set_mode;
  uav1_offb_set_mode.request.custom_mode = "OFFBOARD";
  uav2_offb_set_mode.request.custom_mode = "OFFBOARD";
@@ -909,6 +1047,8 @@ int main(int argc, char **argv)
        }
    }
 
+//keyboard control
+
    int c = getch();
 
    //ROS_INFO("C: %d",c);
@@ -923,17 +1063,17 @@ int main(int argc, char **argv)
            vir2.z += -0.05;
            break;
        case 67:    // key CW(->)
-           vir1.roll -= 0.03;
+           vir1.yaw -= 0.03;
            break;
        case 68:    // key CCW(<-)
-           vir1.roll += 0.03;
+           vir1.yaw += 0.03;
            break;
        case 119:    // key foward
            vir1.x += 0.05;
            vir2.x += 0.05;
            break;
        case 49: // keyboard 1
-           jumping_rope_control = true;
+           swing_up_control = true;
            break;
        case 50:
          start_observer = true;
@@ -975,19 +1115,20 @@ int main(int argc, char **argv)
            break;
        }
    }
-   if(vir1.roll>pi)
-   vir1.roll = vir1.roll - 2*pi;
-   else if(vir1.roll<-pi)
-   vir1.roll = vir1.roll + 2*pi;
+   // Conver yaw to +pi ~ -pi
+   if(vir1.yaw>pi)
+   vir1.yaw = vir1.yaw - 2*pi;
+   else if(vir1.yaw<-pi)
+   vir1.yaw = vir1.yaw + 2*pi;
 
-   if(vir2.roll>pi)
-   vir2.roll = vir2.roll - 2*pi;
-   else if(vir2.roll<-pi)
-   vir2.roll = vir2.roll + 2*pi;
+   if(vir2.yaw>pi)
+   vir2.yaw = vir2.yaw - 2*pi;
+   else if(vir2.yaw<-pi)
+   vir2.yaw = vir2.yaw + 2*pi;
 
 
-   //Apply wrench
-
+   //Apply wrench for payload
+/*
    if(apply_wrench_flag){
      ros::Duration duration_(0.8);
      //
@@ -1002,13 +1143,13 @@ int main(int argc, char **argv)
 
      apply_wrench_flag = false;
    }
-
+*/
 
    //Calculate rope angle
 
    double uav1_rope_theta,uav2_rope_theta, uav1_rope_theta_sensor, uav2_rope_theta_sensor;
 
-   //From force estimate
+   //By force estimate
     //uav1
    if(uav1_force_est.z < 0){
      uav1_rope_theta = atan2(uav1_force_est.z,uav1_force_est.x) + 2*pi;
@@ -1039,8 +1180,8 @@ int main(int argc, char **argv)
    uav2_rope_theta = uav2_rope_theta - pi/2;
    }
 
-   uav2_rope_theta = -uav2_rope_theta;
-   //For theta = zero is downward
+   uav2_rope_theta = -uav2_rope_theta;//Theta = 0 is at upright position.
+   //For theta = 0 is downward
    //uav2_rope_theta = -(uav2_rope_theta + pi);
 
 
@@ -1048,7 +1189,7 @@ int main(int argc, char **argv)
 
    //uav2_rope_angle.x = -(uav2_rope_theta + pi);
 
-   //From force sensor
+   //By force sensor
    if(uav1_wrench.wrench.force.x < 0 && uav1_wrench.wrench.force.z > 0){
      uav1_rope_theta_sensor = atan2(uav1_wrench.wrench.force.z,uav1_wrench.wrench.force.x);
      uav1_rope_theta_sensor = -2.5*3.1415926+uav1_rope_theta_sensor;
@@ -1071,28 +1212,24 @@ int main(int argc, char **argv)
    //non-linear observer x(k+1) = non_linear_observer(x(k),y(k))
 
    //uav2
-
-
-//   uav2_theta_psi_dot = (uav2_theta_hat_psi(0) - uav2_theta_psi_l)/0.03333;
-//   uav2_theta_psi_l = uav2_theta_hat_psi(0);
-    //psi
+   //theta_psi estimate
    double psi_meas, psi_meas_meas;
    psi_meas_meas = ((-(uav2_rope_theta_sensor+pi)) - (-(uav2_theta_hat_1(0)+pi)));
    psi_meas = uav2_rope_theta - uav2_theta_hat_1(0);
-   //ROS_INFO("psi_meas = %f", psi_meas);
    psi_meas = psi_meas;
-   uav2_theta_hat_psi(0) = -uav2_theta_hat_psi(0);
+   uav2_theta_hat_psi(0) = -uav2_theta_hat_psi(0);//This conversion is due to the direction of psi estimate
    uav2_theta_hat_psi_meas(0) = -uav2_theta_hat_psi_meas(0);
    uav2_theta_hat_psi = non_linear_observer(uav2_theta_hat_psi, psi_meas);
    uav2_theta_hat_psi_meas = non_linear_observer(uav2_theta_hat_psi_meas, psi_meas_meas);
 
-    //theta
+    //theta_theta estimate
    uav2_theta_hat_1 = non_linear_observer(uav2_theta_hat_1,uav2_rope_theta);
    uav2_theta_hat_1_meas = non_linear_observer(uav2_theta_hat_1_meas,uav2_rope_theta_sensor);
 
-   //ROS_INFO("y = %f, x_hat = %f", y, x(0));
 
    //uav1
+
+   //theta_theta estimate
    uav1_theta_hat_1 = non_linear_observer(uav1_theta_hat_1,uav1_rope_theta);
    uav1_theta_hat_1_meas = non_linear_observer(uav1_theta_hat_1_meas,uav1_rope_theta_sensor);
 
@@ -1101,6 +1238,8 @@ int main(int argc, char **argv)
    uav1_theta_hat_1_p.y = uav1_theta_hat_1(1);
    uav1_theta_hat_1_meas_p.x = -(uav1_theta_hat_1_meas(0)+pi);
    uav1_theta_hat_1_meas_p.y = -uav1_theta_hat_1_meas(1);
+
+   //publish data
 
    uav2_theta_hat.x = -(uav2_theta_hat_1(0) + pi);
    uav2_theta_hat.y = -uav2_theta_hat_1(1);
@@ -1113,7 +1252,6 @@ int main(int argc, char **argv)
    ROS_INFO("uav2_psi_hat_dot = %f", uav2_theta_hat_psi(1));
    double psi_filt;
    psi_filt = lpf2_psi_dot.filter(uav2_theta_psi_dot);
-   //uav2_psi_hat.z =psi_filt;
    uav1_control_input_pub.publish(uav1_control_input);
    uav1_pose_z_pub.publish(uav1_pose_z);
    uav2_pose_z_pub.publish(uav2_pose_z);
@@ -1129,9 +1267,13 @@ int main(int argc, char **argv)
    uav2_control_input_pub.publish(uav2_control_input);
    uav2_E_dot_hat_theta_pub.publish(uav2_E_dot_hat_theta);
    uav1_E_dot_hat_theta_pub.publish(uav1_E_dot_hat_theta);
-   follow_omega1(vir1,uav1_host_mocap, uav1_host_mocapvel,&uav1_pose, uav1_theta_hat_1(0), 0, uav1_theta_hat_1(1),  0);
-   follow_omega2(vir2,uav2_host_mocap, uav2_host_mocapvel,&uav2_pose,-(uav2_theta_hat_1(0) + pi), -uav2_theta_hat_psi(0),-uav2_theta_hat_1(1),  uav2_theta_hat_psi(1));
+
+   //Controller
+   //For leader's controller, theta = 0 is at upright positon.
+   leader_controller(vir1,uav1_host_mocap, uav1_host_mocapvel,&uav1_pose, uav1_theta_hat_1(0), 0, uav1_theta_hat_1(1),  0);
    uav1_attitude_pub.publish(uav1_pose);
+   //For follower's controller, theta = 0 is at downwared position. Acoordingly, it requires the conversion from theta = 0 at upright positon to theta = 0 at downward postion.
+   follower_controller(vir2,uav2_host_mocap, uav2_host_mocapvel,&uav2_pose,-(uav2_theta_hat_1(0) + pi), uav2_theta_hat_psi(0),-uav2_theta_hat_1(1),  uav2_theta_hat_psi(1));
    uav2_attitude_pub.publish(uav2_pose);
    ros::spinOnce();
    rate.sleep();
