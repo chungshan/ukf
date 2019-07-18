@@ -24,7 +24,7 @@
 #include <iostream>
 #include <iterator>
 #include <random>
-
+#include <geometry_msgs/WrenchStamped.h>
 #define l 0.25
 #define k 0.02
 int drone_flag;
@@ -76,7 +76,19 @@ geometry_msgs::Point gyro_bias;
 void gyro_cb(const geometry_msgs::Point::ConstPtr &msg){
   gyro_bias = *msg;
 }
-
+geometry_msgs::WrenchStamped rotor_0, rotor_1, rotor_2, rotor_3;
+void rotor_0_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg){
+  rotor_0 = *msg;
+}
+void rotor_1_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg){
+  rotor_1 = *msg;
+}
+void rotor_2_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg){
+  rotor_2 = *msg;
+}
+void rotor_3_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg){
+  rotor_3 = *msg;
+}
 gazebo_msgs::ModelStates model_states;
 Eigen::Vector3d iris_1_vel;
 void model_state_cb(const gazebo_msgs::ModelStates::ConstPtr& msg){
@@ -124,7 +136,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "sim_force_estimate");
   ros::NodeHandle nh;
 
-  std::string topic_imu, topic_mocap, topic_thrust, topic_vel, topic_mag, topic_raw,topic_battery,topic_odom, topic_acc_bias, topic_gyro_bias;
+  std::string topic_imu, topic_mocap, topic_thrust, topic_vel, topic_mag, topic_raw,topic_battery,topic_odom, topic_acc_bias, topic_gyro_bias, topic_rotor_0, topic_rotor_1, topic_rotor_2, topic_rotor_3;
   ros::param::get("~topic_imu", topic_imu);
   ros::param::get("~topic_mocap", topic_mocap);
   ros::param::get("~topic_thrust", topic_thrust);
@@ -137,6 +149,10 @@ int main(int argc, char **argv)
   ros::param::get("~topic_odom", topic_odom);
   ros::param::get("~topic_acc_bias", topic_acc_bias);
   ros::param::get("~topic_gyro_bias", topic_gyro_bias);
+  ros::param::get("~topic_rotor_0", topic_rotor_0);
+  ros::param::get("~topic_rotor_1", topic_rotor_1);
+  ros::param::get("~topic_rotor_2", topic_rotor_2);
+  ros::param::get("~topic_rotor_3", topic_rotor_3);
   ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>(topic_imu, 2, imu_cb);
   ros::Subscriber raw_sub = nh.subscribe<sensor_msgs::Imu>(topic_raw, 2, raw_cb);
   ros::Subscriber pos_sub = nh.subscribe<geometry_msgs::PoseStamped>(topic_mocap, 2, pose_cb);
@@ -147,6 +163,12 @@ int main(int argc, char **argv)
   //ros::Subscriber odom_sub = nh.subscribe<nav_msgs::Odometry>(topic_odom, 2, odom_cb);
   ros::Subscriber acc_sub = nh.subscribe<geometry_msgs::Point>(topic_acc_bias, 2, acc_cb);
   ros::Subscriber gyro_sub = nh.subscribe<geometry_msgs::Point>(topic_gyro_bias, 2, gyro_cb);
+
+  ros::Subscriber rotor_0_sub = nh.subscribe<geometry_msgs::WrenchStamped>(topic_rotor_0, 10, rotor_0_cb);
+  ros::Subscriber rotor_1_sub = nh.subscribe<geometry_msgs::WrenchStamped>(topic_rotor_1, 10, rotor_1_cb);
+  ros::Subscriber rotor_2_sub = nh.subscribe<geometry_msgs::WrenchStamped>(topic_rotor_2, 10, rotor_2_cb);
+  ros::Subscriber rotor_3_sub = nh.subscribe<geometry_msgs::WrenchStamped>(topic_rotor_3, 10, rotor_3_cb);
+
   ros::Publisher euler_pub = nh.advertise<geometry_msgs::Point>("euler", 2);
   ros::Publisher euler_ref_pub = nh.advertise<geometry_msgs::Point>("euler_ref", 2);
   ros::Publisher force_pub = nh.advertise<geometry_msgs::Point>("force_estimate", 2);
@@ -288,6 +310,7 @@ int main(int argc, char **argv)
         }
     }
     double F1, F2, F3, F4;
+    double F1_, F2_, F3_, F4_;
     double pwm1, pwm2, pwm3, pwm4;
     double U_x, U_y, U_z;
     Eigen::MatrixXd theta_q(4,3), phi_q(4,3);
@@ -365,31 +388,31 @@ if(drone_flag==3){
 
 if(drone_flag==2){
   double a;
-
+/*
     F1 = (8.1733*1e-4*(pwm3*pwm3) - 1.2950*pwm3 + 397)*9.8/1000; //drone2
     F2 = (8.1733*1e-4*(pwm1*pwm1) - 1.2950*pwm1 + 397)*9.8/1000; //left_right:265.7775
     F3 = (8.1733*1e-4*(pwm4*pwm4) - 1.2950*pwm4 + 397)*9.8/1000; //up_down:265.7775
-    F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 397)*9.8/1000;
+    F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 397)*9.8/1000; //sim:397
+*/
 
-  /*
+  F1 = rotor_1.wrench.force.z;
+  F2 = rotor_0.wrench.force.z;
+  F3 = rotor_3.wrench.force.z;
+  F4 = rotor_2.wrench.force.z;
+
+/*
   F1 = (8.0274*1e-4*(pwm3*pwm3) - 1.441*pwm3 +  587.9219)*9.8/1000; //drone2
   F2 = (5.167*1e-4*(pwm1*pwm1)  - 0.5049*pwm1 - 106.083)*9.8/1000; //left_right:265.7775
   F3 = (9.74659*1e-4*(pwm4*pwm4) -1.90901*pwm4 + 915.60244)*9.8/1000; //up_down:265.7775
   F4 = (6.04312*1e-4*(pwm2*pwm2) -0.767787*pwm2 + 78.7524)*9.8/1000;
 */
-    /*
-    battery_p.x = F1+F2+F3+F4;
-    Eigen::Vector3d thrust_ve;
-    Eigen::Vector3d thrust_vec;
-    thrust_ve << 0,0, battery_p.x;
-    thrust_vec = forceest1.R_IB * thrust_ve;
-    battery_p.z = thrust_vec(2);
-    battery_p.y = thrust_vec(0);
-    thrust.x = F2;
-    thrust.y = F3;
-    thrust.z = F4;
+
+/*
+    thrust.x = F1_+F2_+F3_+F4_;
+    thrust.y = F1+F2+F3+F4;
+
     thrust_pub.publish(thrust);
-    */
+*/
 /*
     if(battery_flag2 == 1){
 

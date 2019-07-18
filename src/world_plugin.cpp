@@ -52,9 +52,10 @@ public:
       this->iris_base_link = this->iris_model->GetLink("iris1::base_link");
       this->iris_base_link2 = this->iris_model2->GetLink("iris2::base_link");
       //this->joint_5 = this->payload_model->GetJoint("payload::payload_link_joint3");
-      this->payload_g = this->payload_model->GetLink("payload::payload_rec_g_box");
+      this->payload_g = this->payload_model->GetLink("payload::payload_rec");//_g_box
       this->payload_g1 = this->payload_model->GetLink("payload::payload_rec_g1_box");
-      //For uav1 theta_theta
+      this->payload_g2 = this->payload_model->GetLink("payload::payload_rec_g2_box");
+      //For uav1 theta
       double uav1_x_pose = this->iris_base_link->GetWorldPose().pos.x;
       double uav1_z_pose = this->iris_base_link->GetWorldPose().pos.z;
       double g_pos_x = this->payload_g->GetWorldPose().pos.x;
@@ -63,6 +64,7 @@ public:
       double uav1_dx = g_pos_x  - uav1_x_pose;
       double uav1_dz = g_pos_z  - uav1_z_pose;
       double uav1_theta_theta = atan2(uav1_dx,-uav1_dz);
+
       //For uav2 theta
       double uav2_x_pose = this->iris_base_link2->GetWorldPose().pos.x;
       double uav2_z_pose = this->iris_base_link2->GetWorldPose().pos.z;
@@ -83,9 +85,17 @@ public:
       double uav2_dyyy = g1_pos_y  - g_pos_y;
       //double uav2_theta_psi = uav2_theta - uav2_theta_theta;
       double uav2_theta_psi = atan2(uav2_dxxx, uav2_dyyy);
+
+      //For theta
+      double ang_x_pose = (uav1_x_pose + uav2_x_pose)/2;
+      double ang_z_pose = (uav1_z_pose + uav2_z_pose)/2;
+      double payload_dx = g_pos_x - ang_x_pose;
+      double payload_dz = g_pos_z - ang_z_pose;
+      double payload_theta = atan2(payload_dx, -payload_dz);
+
       uav2_psi_groundtruth.x = uav2_theta_psi;
       uav2_psi_groundtruth.y = uav2_theta_theta;
-      uav2_psi_groundtruth.z = uav1_theta_theta;
+      uav2_psi_groundtruth.z = payload_theta;
       this->rosPub.publish(uav2_psi_groundtruth);
       //ROS_INFO("l = %f, l* = %f", y_pos,joint_pos_y);
 }
@@ -151,7 +161,7 @@ ros::spinOnce();
     private: physics::ModelPtr iris_model, iris_model2;
     private: physics::ModelPtr payload_model, payload_model2;
     private: physics::LinkPtr iris_base_link, iris_base_link2;
-    private: physics::LinkPtr payload_link, payload_link2, payload, payload_box2, payload_g, payload_g1;
+    private: physics::LinkPtr payload_link, payload_link2, payload, payload_box2, payload_g, payload_g1, payload_g2;
     bool add_inv = true;
     bool add_inv_2 = true;
     //For single drones

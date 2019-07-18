@@ -18,6 +18,8 @@
 #include "lpf2.h"
 #include <gazebo_msgs/ApplyBodyWrench.h>
 #include <geometry_msgs/Wrench.h>
+#include <gazebo_msgs/LinkStates.h>
+
 gazebo_msgs::ApplyBodyWrench drone_apply_force;
 geometry_msgs::Wrench apply_wrench;
 geometry_msgs::Point uav1_pose_z,uav2_pose_z,uav1_theta_hat_1_p,uav1_theta_hat_1_meas_p,uav1_force_est, uav2_force_est, uav1_rope_angle, uav2_rope_angle, uav2_theta_hat,uav2_theta_hat_meas, uav2_psi_hat, uav2_psi_hat_meas,uav2_E_dot_hat_theta,uav1_E_dot_hat_theta, uav1_control_input,uav2_control_input, uav1_theta;
@@ -202,6 +204,48 @@ void ground_cb(const geometry_msgs::Point::ConstPtr& msg)
   groundtruth = *msg;
 }
 
+gazebo_msgs::LinkStates link_states;
+geometry_msgs::Point payload_angular_v;
+void link_cb(const gazebo_msgs::LinkStates::ConstPtr& msg){
+   link_states = *msg;
+   if(link_states.name.size()>0){
+       for (unsigned int i=0;i<link_states.name.size();i++) {
+         /*
+           if(link_states.name[i].compare("payload::payload_link1_box")==0){
+                con_1_pose<< link_states.pose[i].position.x,
+                            link_states.pose[i].position.y,
+                            link_states.pose[i].position.z;
+                con_1_vel<< link_states.twist[i].linear.x,
+                            link_states.twist[i].linear.y,
+                            link_states.twist[i].linear.z;
+                con1_vel.x = link_states.twist[i].linear.x;
+                con1_vel.y = link_states.twist[i].linear.y;
+                con1_vel.z = link_states.twist[i].linear.z;
+
+           }
+           if(link_states.name[i].compare("payload::payload_link2_box")==0){
+               con_2_pose<< link_states.pose[i].position.x,
+                           link_states.pose[i].position.y,
+                           link_states.pose[i].position.z;
+               con_2_vel<< link_states.twist[i].linear.x,
+                           link_states.twist[i].linear.y,
+                           link_states.twist[i].linear.z;
+               con2_vel.x = link_states.pose[i].position.x;
+               con2_vel.y = link_states.pose[i].position.y;
+               con2_vel.z = link_states.pose[i].position.z;
+           }
+*/
+         if(link_states.name[i].compare("payload::payload_rec")==0){
+             payload_angular_v.x = link_states.twist[i].angular.x;
+             payload_angular_v.y = -link_states.twist[i].angular.y;
+             payload_angular_v.z = link_states.twist[i].angular.z;
+
+         }
+
+       }
+   }
+
+}
 typedef struct
 {
     float yaw;
@@ -382,7 +426,7 @@ l_star = 0.5;
 J_p = m_p * l_star * l_star;//Payload's inertia
 omega_des = g/l_star;
 theta_des = 135/57.29577951;
-v_p = l_star*omega;
+v_p = l_star*(-omega);
 // + 0.5*J_p*(omega)*(omega)
 //E = m_p*g*l_star*(cos(theta) - 1);
 
@@ -428,11 +472,14 @@ E_dot_l = -m_p*l_star*(-omega)*cos(theta_z)*uav1_acc_inertia(0)/2;
 
 uav1_E_dot_hat_theta.x = E_des_z;
 uav1_E_dot_hat_theta.y = E_z;
-uav1_E_dot_hat_theta.z = 0.5*J_p*(omega_ground_theta)*(omega_ground_theta) + m_p*g*l_star*(1-cos(groundtruth.z));
+uav1_E_dot_hat_theta.z = 0.5*J_p*(payload_angular_v.y)*(payload_angular_v.y) + m_p*g*l_star*(1-cos(groundtruth.z));
+
+
+
 
 uav1_theta.x = theta_z;
 uav1_theta.y = pi - theta_des;
-
+uav1_theta.z = groundtruth.z;
 //Position, veloctiy error
 
 errx = -(host_mocap.pose.position.x - vir.x);
@@ -930,6 +977,10 @@ int main(int argc, char **argv)
   ros::Subscriber uav1_imu_sub = nh.subscribe<sensor_msgs::Imu>("/uav1/mavros/imu/data",2,uav1_imu_cb);
   //Ground truth sub
   ros::Subscriber theta_ground_sub = nh.subscribe<geometry_msgs::Point>("/theta_groundtruth", 2, ground_cb);
+  //Gazebo link state
+  ros::Subscriber link_sub = nh.subscribe<gazebo_msgs::LinkStates>("/gazebo/link_states", 3, link_cb);
+
+
   //Data pub
   ros::Publisher uav1_rope_angle_pub = nh.advertise<geometry_msgs::Point>("/uav1rope_angle", 2);
   ros::Publisher uav2_rope_angle_pub = nh.advertise<geometry_msgs::Point>("/uav2rope_angle2", 2);
@@ -949,7 +1000,7 @@ int main(int argc, char **argv)
   ros::Publisher uav1_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav1_pose", 2);
   ros::Publisher uav2_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav2_pose", 2);
   ros::Publisher uav1_control_input_pub = nh.advertise<geometry_msgs::Point>("uav1_control_input", 2);
-
+  ros::Publisher payload_angular_v_pub = nh.advertise<geometry_msgs::Point>("/payload_angular_v", 2);
   //Apply force service
   ros::ServiceClient apply_force_client = nh.serviceClient<gazebo_msgs::ApplyBodyWrench>("/gazebo/apply_body_wrench");
 
@@ -1235,7 +1286,7 @@ int main(int argc, char **argv)
 
 
    uav1_theta_hat_1_p.x = -(uav1_theta_hat_1(0)+pi);
-   uav1_theta_hat_1_p.y = uav1_theta_hat_1(1);
+   uav1_theta_hat_1_p.y = -uav1_theta_hat_1(1);
    uav1_theta_hat_1_meas_p.x = -(uav1_theta_hat_1_meas(0)+pi);
    uav1_theta_hat_1_meas_p.y = -uav1_theta_hat_1_meas(1);
 
@@ -1267,7 +1318,7 @@ int main(int argc, char **argv)
    uav2_control_input_pub.publish(uav2_control_input);
    uav2_E_dot_hat_theta_pub.publish(uav2_E_dot_hat_theta);
    uav1_E_dot_hat_theta_pub.publish(uav1_E_dot_hat_theta);
-
+   payload_angular_v_pub.publish(payload_angular_v);
    //Controller
    //For leader's controller, theta = 0 is at upright positon.
    leader_controller(vir1,uav1_host_mocap, uav1_host_mocapvel,&uav1_pose, uav1_theta_hat_1(0), 0, uav1_theta_hat_1(1),  0);

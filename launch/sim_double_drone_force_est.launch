@@ -9,6 +9,10 @@
      <param name="topic_battery" value="/uav1/mavros/battery" />
      <param name="topic_vel" value="/uav1/mavros/local_position/velocity_local" />
      <param name="topic_drone" value="2" />
+     <param name="topic_rotor_0" value="/uav1/rotor_0_ft" />
+     <param name="topic_rotor_1" value="/uav1/rotor_1_ft" />
+     <param name="topic_rotor_2" value="/uav1/rotor_2_ft" />
+     <param name="topic_rotor_3" value="/uav1/rotor_3_ft" />
    </node>
 </group>
 <group ns = "uav2">
@@ -21,6 +25,10 @@
      <param name="topic_battery" value="/uav2/mavros/battery" />
      <param name="topic_vel" value="/uav2/mavros/local_position/velocity_local" />
      <param name="topic_drone" value="2" />
+     <param name="topic_rotor_0" value="/uav2/rotor_0_ft" />
+     <param name="topic_rotor_1" value="/uav2/rotor_1_ft" />
+     <param name="topic_rotor_2" value="/uav2/rotor_2_ft" />
+     <param name="topic_rotor_3" value="/uav2/rotor_3_ft" />
    </node>
 </group>
 </launch>

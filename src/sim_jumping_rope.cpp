@@ -1351,7 +1351,7 @@ int main(int argc, char **argv)
 
     vir1.x = 0.0;
     vir1.y = 0;
-    vir1.z = 2.0;
+    vir1.z = 1.0;
     vir1.roll = 0;
 
     mavros_msgs::AttitudeTarget pose;
@@ -1378,7 +1378,7 @@ int main(int argc, char **argv)
         //mocap_pos_pub.publish(host_mocap);
         vir1.x = 0.0;
         vir1.y = 0.0;
-        vir1.z = 2.0;
+        vir1.z = 1.0;
         vir1.roll = 0;
 
         ros::spinOnce();
@@ -1547,7 +1547,7 @@ break_joint.z = rope_theta;
 */
         //rope_theta = atan2(force_est.z,force_est.x) - 3.1415926/2;
         sim_angle.z = rope_theta;
-        sim_angle.y = rope_theta1;
+        sim_angle.y = -(rope_theta1+pi);
         /*
         rope_theta = rope_angle.x;
         rope_omega = rope_angle.y;
@@ -1578,14 +1578,14 @@ break_joint.z = rope_theta;
         //pos_des.y = vir1.y;
         //pos_des.z = vir1.z;
         if(apply_wrench_flag){
-          ros::Duration duration_(0.8);
+          ros::Duration duration_(2);
           //
-          drone_apply_force.request.body_name="iris_rplidar::payload::payload";
+          drone_apply_force.request.body_name="iris::base_link";
           drone_apply_force.request.duration = duration_;
           drone_apply_force.request.reference_point = ref_point;
-          apply_wrench.force.x = 1;
+          apply_wrench.force.x = 2;
           apply_wrench.force.y = 0;
-          apply_wrench.force.z = 0;
+          apply_wrench.force.z = -2;
           drone_apply_force.request.wrench = apply_wrench;
           apply_force_client.call(drone_apply_force);
           sim_apply_force_.x = apply_wrench.force.x;
@@ -1611,7 +1611,7 @@ break_joint.z = rope_theta;
 
         last_vel = host_mocapvel.twist.linear.x;
         //sim_drone_vel_pub.publish(sim_drone_vel);
-        //sim_apply_force_pub.publish(sim_apply_force_);
+        sim_apply_force_pub.publish(sim_apply_force_);
         //sim_tan_norm_pub.publish(sim_tan_norm);
         trigger_control.z = rope_omega_f;
         //mocap_pos_pub.publish(host_mocap);
