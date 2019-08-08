@@ -7,6 +7,9 @@
 #include <geometry_msgs/PointStamped.h>
 #include <tf/transform_datatypes.h>
 #include "lpf2.h"
+#include <gazebo_msgs/LinkStates.h>
+#include <tf/tf.h>
+
 lpf2 lpaverage(0.01,0.02);
 lpf2 lpf_leader_y(6, 0.02);
 lpf2 lpf_leader_z(6, 0.02);
@@ -40,7 +43,7 @@ void follower_imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
   follower_imu = *msg;
   follower_imu_angular_v.x = follower_imu.angular_velocity.x;
   follower_imu_angular_v.y = follower_imu.angular_velocity.y;
-  follower_imu_angular_v.z =        follower_imu.angular_velocity.z;
+  follower_imu_angular_v.z = follower_imu.angular_velocity.z;
 }
 
 geometry_msgs::PoseStamped imu1_mocap;
@@ -50,15 +53,82 @@ void imu1_mocap_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
 }
 geometry_msgs::PoseStamped leader_mocap;
 void leader_mocap_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
-  leader_mocap = *msg;
+  //leader_mocap = *msg;
 }
 geometry_msgs::PoseStamped follower_mocap;
 void follower_mocap_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
-  follower_mocap = *msg;
+  //follower_mocap = *msg;
 }
 geometry_msgs::PoseStamped drone_follower_mocap;
 void drone_follower_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
   drone_follower_mocap = *msg;
+}
+geometry_msgs::Point mass_flag;
+void mass_cb(const geometry_msgs::Point::ConstPtr &msg){
+  mass_flag = *msg;
+}
+gazebo_msgs::LinkStates link_states;
+geometry_msgs::Point payload_angular_v;
+geometry_msgs::PoseStamped payload_att;
+void link_cb(const gazebo_msgs::LinkStates::ConstPtr& msg){
+   link_states = *msg;
+   if(link_states.name.size()>0){
+       for (unsigned int i=0;i<link_states.name.size();i++) {
+         /*
+           if(link_states.name[i].compare("payload::payload_link1_box")==0){
+                con_1_pose<< link_states.pose[i].position.x,
+                            link_states.pose[i].position.y,
+                            link_states.pose[i].position.z;
+                con_1_vel<< link_states.twist[i].linear.x,
+                            link_states.twist[i].linear.y,
+                            link_states.twist[i].linear.z;
+                con1_vel.x = link_states.twist[i].linear.x;
+                con1_vel.y = link_states.twist[i].linear.y;
+                con1_vel.z = link_states.twist[i].linear.z;
+
+           }
+           if(link_states.name[i].compare("payload::payload_link2_box")==0){
+               con_2_pose<< link_states.pose[i].position.x,
+                           link_states.pose[i].position.y,
+                           link_states.pose[i].position.z;
+               con_2_vel<< link_states.twist[i].linear.x,
+                           link_states.twist[i].linear.y,
+                           link_states.twist[i].linear.z;
+               con2_vel.x = link_states.pose[i].position.x;
+               con2_vel.y = link_states.pose[i].position.y;
+               con2_vel.z = link_states.pose[i].position.z;
+           }
+*/
+         if(link_states.name[i].compare("payload::payload_rec_g1_box")==0){
+             payload_angular_v.x = link_states.twist[i].angular.x;
+             payload_angular_v.y = -link_states.twist[i].angular.y;
+             payload_angular_v.z = link_states.twist[i].angular.z;
+             follower_mocap.pose.position.x = link_states.pose[i].position.x;
+             follower_mocap.pose.position.y = link_states.pose[i].position.y;
+             follower_mocap.pose.position.z = link_states.pose[i].position.z;
+             double x  = link_states.pose[i].orientation.x;
+             double y  = link_states.pose[i].orientation.y;
+             double z  = link_states.pose[i].orientation.z;
+             double w  = link_states.pose[i].orientation.w;
+
+             tf::Quaternion quat_transform(x,y,z,w);
+             double roll,pitch,yaw;
+             tf::Matrix3x3(quat_transform).getRPY(roll,pitch,yaw);
+         }
+
+         if(link_states.name[i].compare("payload::payload_rec_g2_box")==0){
+
+             leader_mocap.pose.position.x = link_states.pose[i].position.x;
+             leader_mocap.pose.position.y = link_states.pose[i].position.y;
+             leader_mocap.pose.position.z = link_states.pose[i].position.z;
+
+
+
+         }
+
+       }
+   }
+
 }
 Eigen::VectorXd u_r_o;
 int rate_r;
@@ -157,7 +227,7 @@ void estimation_model(){
   Eigen::Vector3d pf,pl;
   double e_sum;
   residual = 0;
-  p = 1.2;
+ // p = 1.2;
   alpha = 0.997395;
   beta = 0.99913;
   I6 << 1.0, 0, 0, 0, 0, 0,
@@ -240,7 +310,7 @@ void estimation_model(){
 
   a_g_inertial(0) = 0;
   a_g_inertial(1) = 0;
-  a_g_inertial(2) = 9.81;
+  a_g_inertial(2) = 0;
   roll = rpy_mocap.x;
   pitch = rpy_mocap.y;
   yaw = rpy_mocap.z;
@@ -276,7 +346,7 @@ void estimation_model(){
 
   a_g_body = Ry*Rx*Rz*a_g_inertial;
 
-  v_f_dot_body(0) = (follower_imu.linear_acceleration.x - a_g_body(0));
+  v_f_dot_body(0) = (- follower_imu.linear_acceleration.x - a_g_body(0));
   v_f_dot_body(1) = (follower_imu.linear_acceleration.y + a_g_body(1));
   v_f_dot_body(2) = (follower_imu.linear_acceleration.z - a_g_body(2));
   v_f_dot = (Rz*Rx*Ry).inverse()*v_f_dot_body;
@@ -481,14 +551,14 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "estimate_payload_v2");
   ros::NodeHandle nh;
-  ros::Subscriber follower_force_sub = nh.subscribe<geometry_msgs::Point>("/follower_ukf/force_estimate", 1, follower_force_cb);
-  ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/leader_ukf/force_estimate", 1, leader_force_cb);
-  ros::Subscriber leader_imu_sub = nh.subscribe<sensor_msgs::Imu>("/drone3_imu/mavros/imu/data", 1, leader_imu_cb);
-  ros::Subscriber follower_imu_sub = nh.subscribe<sensor_msgs::Imu>("/imu1/mavros/imu/data", 1, follower_imu_cb);
-  ros::Subscriber imu1_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 1, imu1_mocap_cb);
-  ros::Subscriber leader_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody4/pose", 1, leader_mocap_cb);
-  ros::Subscriber follower_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 1, follower_mocap_cb);
-  ros::Subscriber drone_follower_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 1, drone_follower_cb);
+  ros::Subscriber follower_force_sub = nh.subscribe<geometry_msgs::Point>("/uav2/force_nobias", 1, follower_force_cb);
+  ros::Subscriber leader_force_sub = nh.subscribe<geometry_msgs::Point>("/uav1/force_nobias", 1, leader_force_cb);
+  ros::Subscriber leader_imu_sub = nh.subscribe<sensor_msgs::Imu>("/uav1/mavros/imu/data", 1, leader_imu_cb);
+  ros::Subscriber follower_imu_sub = nh.subscribe<sensor_msgs::Imu>("/payload/payload_g1_imu", 1, follower_imu_cb);
+  //ros::Subscriber imu1_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 1, imu1_mocap_cb);
+  //ros::Subscriber leader_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody4/pose", 1, leader_mocap_cb);
+  //ros::Subscriber follower_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody1/pose", 1, follower_mocap_cb);
+  //ros::Subscriber drone_follower_mocap_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/RigidBody2/pose", 1, drone_follower_cb);
   ros::Publisher m_pub = nh.advertise<geometry_msgs::Point>("/m", 2);
   ros::Publisher J_pub = nh.advertise<geometry_msgs::Point>("/J", 2);
   ros::Publisher J_ref_pub = nh.advertise<geometry_msgs::Point>("/J_ref", 2);
@@ -501,6 +571,8 @@ int main(int argc, char **argv)
   ros::Publisher u_r_o_pub = nh.advertise<geometry_msgs::Point>("/u_r_o", 2);
   ros::Publisher Jav_pub = nh.advertise<geometry_msgs::Point>("/Javerage", 2);
   ros::Publisher alpha_pub = nh.advertise<geometry_msgs::Point>("/alpha", 2);
+  ros::Subscriber link_sub = nh.subscribe<gazebo_msgs::LinkStates>("/gazebo/link_states", 3, link_cb);
+  ros::Subscriber mass_flag_sub = nh.subscribe<geometry_msgs::Point>("/change_m", 2, mass_cb);
   rate_r = 30;
   ros::Rate rate(rate_r);
   theta_hat << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
@@ -531,13 +603,21 @@ int main(int argc, char **argv)
   double running_time;
   int count = 1;
   int count1 = 1;
+
+  for(int i = 0 ; i < 5 ; i++){
+    ros::spinOnce();
+    rate.sleep();
+  }
   while(ros::ok()){
     quaternionToRPY();
     double filtertt;
-    if(flag2 == 1){
+    if(flag2 == 0){
     estimation_model();
     m.x = theta_hat(0);
-    m.y = 0.3;
+    m.y = 0.5;
+    if(mass_flag.x == 1){
+      m.y = 0.7;
+    }
     m.z = average_m;
     J.x = theta_hat(4);//theta_hat(4)
     J.y = theta_hat(7);//theta_hat(7)
@@ -599,9 +679,11 @@ int main(int argc, char **argv)
     }
     filtertt = lpaverage.filter(theta_hat(9));
     ROS_INFO("m = %f", theta_hat(0));
+    /*
     ROS_INFO("tx = %f, ty = %f, tz = %f", p.x,p.y,p.z);
     ROS_INFO("J_xx = %f, J_yy = %f, J_zz = %f", theta_hat(4), theta_hat(7), theta_hat(9));
-    ROS_INFO("average_Jzz = %f, average_Jyy = %f, average_m = %f", average, average_Jyy, average_m);
+    */
+    ROS_INFO("average_m = %f", average_m);
 
 
 }

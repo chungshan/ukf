@@ -231,10 +231,12 @@ int main(int argc, char **argv)
   pnoise(omega_x,omega_x) = 1e-2;
   pnoise(omega_y,omega_y) = 1e-2;
   pnoise(omega_z,omega_z) = 1e-2;
-//larger convergence rate faster
-  pnoise(F_x,F_x) = 1.5;
-  pnoise(F_y,F_y) = 1.5;
-  pnoise(F_z,F_z) = 1.5;
+/*larger ,convergence rate faster
+ if F_z is smaller, the slower convergence rate may let angle estimate diverge.
+*/
+  pnoise(F_x,F_x) = 3;//3
+  pnoise(F_y,F_y) = 3;//3
+  pnoise(F_z,F_z) = 1.5;//1.5
   pnoise(tau_z,tau_z) = 0.05;
 
   pnoise(beta_x,beta_x) = 0.05;//調大beta會無法收斂
@@ -382,7 +384,7 @@ if(drone_flag==3){
     F3 = (5.16589*1e-4*(pwm4*pwm4) - 0.48275*pwm4 - 148.5)*9.8/1000; //up_down:97.5178
     F4 = (6.64161*1e-4*(pwm2*pwm2) - 0.89101*pwm2 + 132.7442)*9.8/1000;
   }
-  battery_p.x = F1+F2+F3+F4;
+  //battery_p.x = F1+F2+F3+F4;
 
 }
 
@@ -395,11 +397,12 @@ if(drone_flag==2){
     F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 397)*9.8/1000; //sim:397
 */
 
-  F1 = rotor_1.wrench.force.z;
-  F2 = rotor_0.wrench.force.z;
-  F3 = rotor_3.wrench.force.z;
-  F4 = rotor_2.wrench.force.z;
+  F1 = 0.96*rotor_1.wrench.force.z;//0.96 for estimate payload's mass
+  F2 = 0.96*rotor_0.wrench.force.z;
+  F3 = 0.96*rotor_3.wrench.force.z;
+  F4 = 0.96*rotor_2.wrench.force.z;
 
+  battery_p.x = F1+F2+F3+F4;
 /*
   F1 = (8.0274*1e-4*(pwm3*pwm3) - 1.441*pwm3 +  587.9219)*9.8/1000; //drone2
   F2 = (5.167*1e-4*(pwm1*pwm1)  - 0.5049*pwm1 - 106.083)*9.8/1000; //left_right:265.7775
@@ -431,7 +434,7 @@ if(drone_flag==2){
 */
 }
 
-
+    battery_pub.publish(battery_p);
     ROS_INFO("Thrust = %f", forceest1.thrust);
    //Calculate thrust and torque
     forceest1.thrust = F1 + F2 + F3 + F4;

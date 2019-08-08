@@ -22,9 +22,12 @@
 
 gazebo_msgs::ApplyBodyWrench drone_apply_force;
 geometry_msgs::Wrench apply_wrench;
-geometry_msgs::Point uav1_pose_z,uav2_pose_z,uav1_theta_hat_1_p,uav1_theta_hat_1_meas_p,uav1_force_est, uav2_force_est, uav1_rope_angle, uav2_rope_angle, uav2_theta_hat,uav2_theta_hat_meas, uav2_psi_hat, uav2_psi_hat_meas,uav2_E_dot_hat_theta,uav1_E_dot_hat_theta, uav1_control_input,uav2_control_input, uav1_theta;
+geometry_msgs::Point uav1_pose_z,uav2_pose_z,uav1_theta_hat_1_p,uav1_theta_hat_1_meas_p,uav1_force_est, uav2_force_est, uav1_rope_angle, uav2_rope_angle, uav2_theta_hat,uav2_theta_hat_meas, uav2_psi_hat, uav2_psi_hat_meas,uav2_E_dot_hat_theta,uav1_E_dot_hat_theta, uav1_control_input,uav2_control_input, uav1_theta, change_mass_flag;
 lpf2 lpf2_E_hat_dot(10,0.0333);
+lpf2 lpf2_E_hat_dot_l(10,0.0333);
 lpf2 lpf2_E_f_dot(10,0.0333);
+lpf2 lpf2_E_l_dot(10,0.0333);
+
 lpf2 lpf2_E_hat_dot_psi(10,0.0333);
 lpf2 lpf2_E_f_dot_psi(10,0.0333);
 lpf2 lpf2_E_psi(10,0.0333);
@@ -390,8 +393,9 @@ double sw_Kpz = 40, sw_Kvz = 1.25;// Height control gain sw_Kpz = 25, sw_Kvz = 1
 double uav1_last_omega;
 double total_air;
 double air_density = 1.2;
-
+double E_theta_hat_last_l;
 double last_groundtruth_theta;
+double dt = 0.03333;
 void leader_controller(vir& vir, geometry_msgs::PoseStamped& host_mocap, geometry_msgs::TwistStamped& host_mocapvel, mavros_msgs::AttitudeTarget* pose,double theta,double theta_2,double omega,double omega_2)
 {
 float errx, erry, errz, err_yaw;
@@ -403,7 +407,7 @@ double J_p;
 const double g = 9.81;
 double omega_des;
 const double ng = 0.4*9.81;
-double alpha, alpha_filt;
+double alpha, alpha1, alpha_filt;
 Eigen::Vector3d e3;
 double theta_des, theta_des_z;
 double E_dot_l;
@@ -417,23 +421,20 @@ double uav1_omega_filt;
 double k_sw;
 double uz_l;
 double omega_ground_theta;
-
+double E_dot_F, F_AD, E_dot_AD, E_theta_hat, E_theta_hat_dot, E_theta_hat_dot_filt, E_dot_l_filt;
 omega_ground_theta = (groundtruth.z - last_groundtruth_theta)*30;
 last_groundtruth_theta = groundtruth.z;
-
+omega = -omega;
 e3 << 0,0,1;
 l_star = 0.5;
 J_p = m_p * l_star * l_star;//Payload's inertia
 omega_des = g/l_star;
 theta_des = 135/57.29577951;
-v_p = l_star*(-omega);
+v_p = fabs(l_star*(omega));
 // + 0.5*J_p*(omega)*(omega)
 //E = m_p*g*l_star*(cos(theta) - 1);
 
-//Calculate angular acceleration
-uav1_omega_filt = lpf2_uav1_omega.filter(omega);
-alpha = (uav1_omega_filt - uav1_last_omega)*30;
-uav1_last_omega = uav1_omega_filt;
+
 
 alpha_filt = lpf2_uav1_alpha.filter(alpha);//Angular accleration of theta (second order low pass filter)
 
@@ -445,8 +446,12 @@ alpha_filt = lpf2_uav1_alpha.filter(alpha);//Angular accleration of theta (secon
 theta_z = -(theta + pi);
 theta_des_z = pi - theta_des;
 
+//for minimizing swing anglle
+//theta_des_z = 0;
+
+
 //payload energy estimate
-if(omega>0){
+if(omega<0){
   theta_des_sign = -1;
 }
 else{
@@ -463,10 +468,31 @@ if(theta < -pi){
 E = m_p*g*l_star*(cos(theta) - 1)  + 0.5*J_p*(omega)*(omega);
 E_des = m_p*g*l_star*(cos(theta_des) - 1) + 0.5*c_d*Area*air_density*v_p*v_p*l_star*(theta_des_z-theta_des_sign*theta_z);
 //E_des_z and E_z is only for analysis(theta = 0 at downward position).
-E_des_z = m_p*g*l_star*(1-cos(pi-theta_des)) + 0.5*c_d*Area*air_density*v_p*v_p*l_star*(theta_des_z-theta_des_sign*theta_z);
+//E_des_z = m_p*g*l_star*(1-cos(pi-theta_des)) + 0.5*c_d*Area*air_density*v_p*v_p*l_star*(theta_des_z-theta_des_sign*theta_z);
+E_des_z = m_p*g*l_star*(1-cos(theta_des_z));
 E_z = m_p*g*l_star*(1-cos(theta_z)) + 0.5*J_p*(omega)*(omega);
 
-E_dot_l = -m_p*l_star*(-omega)*cos(theta_z)*uav1_acc_inertia(0)/2;
+E_dot_l = -m_p*l_star*(omega)*cos(theta_z)*uav1_control_input.x/2;
+
+//E_dot_AD
+F_AD = 0.5*c_d*Area*air_density*v_p*v_p;
+E_dot_AD = F_AD * v_p;
+//Estimate follower's energy rate: E_dot_F
+E_theta_hat = 0.5*m_p*l_star*l_star*omega*omega + m_p*g*l_star*(1-cos(theta_z));
+E_theta_hat_dot = (E_theta_hat - E_theta_hat_last_l)/dt;
+E_theta_hat_dot_filt = lpf2_E_hat_dot_l.filter(E_theta_hat_dot);
+E_dot_l_filt = lpf2_E_l_dot.filter(E_dot_l);
+E_dot_F = E_theta_hat_dot_filt - E_dot_l_filt + E_dot_AD;
+E_theta_hat_last_l = E_theta_hat;
+
+//Calculate angular acceleration
+uav1_omega_filt = lpf2_uav1_omega.filter(omega);
+//alpha = (uav1_omega_filt - uav1_last_omega)*30;
+alpha = -g*sin(theta_z)/l_star - F_AD/(m_p*l_star);
+uav1_last_omega = uav1_omega_filt;
+
+
+
 
 //Publish data
 
@@ -542,7 +568,7 @@ Eigen::Vector4d cmdbodyrate_;
  if(swing_up_control == true){
    //ux = 0.4*(E-E_des)*omega*cos(theta) + 0.1 * copysign(1,host_mocap.pose.position.x) * log(1-fabs(host_mocap.pose.position.x)/1);
 
-   k_sw = 4;
+   k_sw = 20;
    /*Test for limited path
    if(host_mocap.pose.position.x < -0.5 && host_mocap.pose.position.x > -1){
      if(omega*cos(theta) < 0){
@@ -563,7 +589,7 @@ Eigen::Vector4d cmdbodyrate_;
    double k_a = air_density*c_d*Area;
    double k = 0.8;
    //leader's swing-up controller
-   if(omega>0){
+   if(omega<0){
      theta_control_sign = 1;
    }
    else{
@@ -571,14 +597,17 @@ Eigen::Vector4d cmdbodyrate_;
    }
 
 
-   ux = k_sw*(E-E_des)*omega*cos(theta) - 2*k_a*(l_star*l_star*alpha*(theta_des_z-theta_des_sign*theta_z) - theta_control_sign*v_p*v_p)/((1+k)*m_p*cos(theta));
+   //ux = k_sw*(E_z-E_des_z)*omega*cos(theta_z) - 2*(k_a*l_star*l_star*l_star*(omega)*alpha*(theta_des_z - theta_des_sign*theta_z) - E_dot_F - 2*E_dot_AD*theta_control_sign*(omega))/(m_p*l_star*(omega)*cos(theta_z));
+   ux = k_sw*(E_z-E_des_z)/(omega*cos(theta_z)) + 2*(E_dot_F - E_dot_AD)/(m_p*l_star*(omega)*cos(theta_z));
    //saturation function
+
    if(ux > limit_contol_factor*ng){
      ux =  limit_contol_factor*ng;
    }
    if(ux < - limit_contol_factor*ng){
      ux =  - limit_contol_factor*ng;
    }
+
 /*
    ROS_INFO("ux = %f", ux);
    ROS_INFO("====end====");
@@ -595,7 +624,7 @@ Eigen::Vector4d cmdbodyrate_;
    a_ref << ux, 0, uz_l;//
 
    uav1_control_input.x = ux;
-   uav1_control_input.z = uz_l;
+   uav1_control_input.z = E_dot_l_filt;
  }
  //Geometric controller: Conver acceleration command to body rate and thrust command
  a_des << a_ref + a_fb - g_;
@@ -609,7 +638,7 @@ Eigen::Vector4d cmdbodyrate_;
 
 }
 double uav2_sumx,uav2_sumy,uav2_sumz;
-double E_theta_hat_last, E_theta_hat_last_psi;
+double E_theta_hat_last_f, E_theta_hat_last_psi;
 double a_f_theta_filt;
 double uav2_last_omega, last_groundtruth_psi;
 
@@ -629,7 +658,6 @@ double phi_theta;
 double E_dot_f,E_dot_f_psi, E_dot_l;
 double E_theta_hat, E_uav2_theta_hat_psi;
 double E_theta_hat_dot;
-double dt;
 double E_theta_hat_dot_filt, E_dot_f_filt,E_psi_filt;
 double delta_E_psi;
 double E_dot_AD;
@@ -649,15 +677,14 @@ uav2_psi_hat.z = omega_ground_psi;
 /*
 omega_psi = -omega_ground_psi;
 */
-dt = 0.03333;
 e3 << 0,0,1;
 l_star = 0.50;
 J_p = m_p * l_star * l_star;
 
 //E_dot_AD
-v_p = l_star*omega;
+v_p = fabs(l_star*omega);
 F_AD = 0.5*c_d*Area*air_density*v_p*v_p;
-E_dot_AD = F_AD * l_star*omega;
+E_dot_AD = F_AD * v_p;
 
 //Angular accleration calculate
 uav2_omega_filt = lpf2_uav2_omega.filter(omega);
@@ -666,13 +693,13 @@ uav2_last_omega = uav2_omega_filt;
 alpha_filt = lpf2_uav2_alpha.filter(alpha);
 
 //Estimate leader's energy rate
-E_dot_f = -m_p*l_star*omega*cos(theta)*uav2_acc_inertia(0)/2;
+E_dot_f = -m_p*l_star*omega*cos(theta)*uav2_control_input.x/2;
 E_theta_hat = 0.5*m_p*l_star*l_star*omega*omega + m_p*g*l_star*(1-cos(theta));
-E_theta_hat_dot = (E_theta_hat- E_theta_hat_last)/dt;
+E_theta_hat_dot = (E_theta_hat- E_theta_hat_last_f)/dt;
 E_theta_hat_dot_filt = lpf2_E_hat_dot.filter(E_theta_hat_dot);
 E_dot_f_filt = lpf2_E_f_dot.filter(E_dot_f);
 E_dot_l = E_theta_hat_dot_filt - E_dot_f_filt + E_dot_AD;
-E_theta_hat_last = E_theta_hat;
+E_theta_hat_last_f = E_theta_hat;
 
 //Esimtae psi energy of payload
 E_dot_f_psi = -m_p*omega_psi*cos(theta_psi)*uav2_acc_inertia(0)/2;
@@ -684,6 +711,13 @@ E_psi_filt = lpf2_E_psi.filter(E_uav2_theta_hat_psi);
 //E_dot_l_psi = E_theta_hat_dot_filt_psi - E_dot_f_filt_psi;
 //E_theta_hat_last_psi = E_uav2_theta_hat_psi;
 E_psi_meas = 0.5*m_p*l_star*l_star*omega_ground_psi*omega_ground_psi + m_p*g*l_star*(1-cos(groundtruth.x));
+
+//For minimizing payload's swing angle
+double E_des_z, E_z, theta_des_z;
+theta_des_z = 0;
+E_des_z = m_p*g*l_star*(1-cos(theta_des_z));
+E_z = m_p*g*l_star*(1-cos(theta)) + 0.5*J_p*(omega)*(omega);
+
 //Publish data
 
 uav2_E_dot_hat_theta.x = E_dot_l;
@@ -751,8 +785,8 @@ if(swing_up_control == true){
   omega_zero_psi = 2*omega_zero_theta;
   omega_theta = omega_zero_theta*(1-(fabs(theta))/pi);
   phi_theta = atan2(-omega/omega_zero_theta, theta);
-  delta_u = 0.1;
-  delta_l = -0.1;
+  delta_u = 0.5;
+  delta_l = -0.5;
   a_f_theta = 4;
 
   //For theta-control
@@ -855,7 +889,7 @@ if(swing_up_control == true){
     a_dis_psi = (a_f_theta/0.5)*delta_E_psi;
   }
   ux_psi = a_dis_psi*omega_psi_n*omega_psi_n*sin(phi_psi);//probelm in sin(phi_psi), the psi_omega is inaccurate.
-
+  //ux = 7*(E_z-E_des_z)*omega*cos(theta);
   ux = ux_theta + ux_psi;
   //ux = 2*ux_theta + 0*ux_psi;//without psi control
 
@@ -872,11 +906,11 @@ if(swing_up_control == true){
   double M = 2;
   uz_f = (uav2_force_est.z + sw_Kpz*errz + 0.8*sw_Kvz*errvz)/M;
   //uz_f = (3*errz + 0.3*errvz);without height control
-  a_fb <<  0, 9*erry + 2.25*errvy+ uav2_sumy, 0;
+  a_fb <<   0, 9*erry + 2.25*errvy+ uav2_sumy, 0;
   a_ref << ux, 0, uz_f;
-  uav2_control_input.x = theta_psi;
+  uav2_control_input.x = ux;
   uav2_control_input.y = omega_psi;
-  uav2_control_input.z = ux_psi;
+  uav2_control_input.z = E_dot_f;
   //ROS_INFO("phi_psi = %f", phi_psi);
 }
 //Geometric controller: Convert accleration command to body rate and thrust command
@@ -1001,6 +1035,7 @@ int main(int argc, char **argv)
   ros::Publisher uav2_pose_z_pub = nh.advertise<geometry_msgs::Point>("/uav2_pose", 2);
   ros::Publisher uav1_control_input_pub = nh.advertise<geometry_msgs::Point>("uav1_control_input", 2);
   ros::Publisher payload_angular_v_pub = nh.advertise<geometry_msgs::Point>("/payload_angular_v", 2);
+  ros::Publisher change_m_pub = nh.advertise<geometry_msgs::Point>("/change_m", 2);
   //Apply force service
   ros::ServiceClient apply_force_client = nh.serviceClient<gazebo_msgs::ApplyBodyWrench>("/gazebo/apply_body_wrench");
 
@@ -1129,8 +1164,9 @@ int main(int argc, char **argv)
        case 50:
          start_observer = true;
          break;
-       case 53:
+       case 53: // keyboard 5
          apply_wrench_flag = true;
+         change_mass_flag.x = 1;
          break;
        case 120:    // key back
            vir1.x += -0.05;
@@ -1179,22 +1215,22 @@ int main(int argc, char **argv)
 
 
    //Apply wrench for payload
-/*
+
    if(apply_wrench_flag){
-     ros::Duration duration_(0.8);
+     ros::Duration duration_(10);
      //
      drone_apply_force.request.body_name="payload::payload_rec";
      drone_apply_force.request.duration = duration_;
      //drone_apply_force.request.reference_point = ref_point;
-     apply_wrench.force.x = 2;
+     apply_wrench.force.x = 0;
      apply_wrench.force.y = 0;
-     apply_wrench.force.z = 0;
+     apply_wrench.force.z = -1.962;
      drone_apply_force.request.wrench = apply_wrench;
      apply_force_client.call(drone_apply_force);
 
      apply_wrench_flag = false;
    }
-*/
+
 
    //Calculate rope angle
 
@@ -1319,6 +1355,9 @@ int main(int argc, char **argv)
    uav2_E_dot_hat_theta_pub.publish(uav2_E_dot_hat_theta);
    uav1_E_dot_hat_theta_pub.publish(uav1_E_dot_hat_theta);
    payload_angular_v_pub.publish(payload_angular_v);
+   change_m_pub.publish(change_mass_flag);
+   //Apply wrench to payload
+
    //Controller
    //For leader's controller, theta = 0 is at upright positon.
    leader_controller(vir1,uav1_host_mocap, uav1_host_mocapvel,&uav1_pose, uav1_theta_hat_1(0), 0, uav1_theta_hat_1(1),  0);

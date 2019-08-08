@@ -1547,7 +1547,7 @@ break_joint.z = rope_theta;
 */
         //rope_theta = atan2(force_est.z,force_est.x) - 3.1415926/2;
         sim_angle.z = rope_theta;
-        sim_angle.y = -(rope_theta1+pi);
+        sim_angle.y = -(rope_theta1+pi)*57.29577951;
         /*
         rope_theta = rope_angle.x;
         rope_omega = rope_angle.y;
@@ -1577,8 +1577,10 @@ break_joint.z = rope_theta;
         //pos_des.x = vir1.x;
         //pos_des.y = vir1.y;
         //pos_des.z = vir1.z;
+        double dur_time = 5;
         if(apply_wrench_flag){
-          ros::Duration duration_(2);
+
+          ros::Duration duration_(dur_time);
           //
           drone_apply_force.request.body_name="iris::base_link";
           drone_apply_force.request.duration = duration_;
@@ -1597,7 +1599,7 @@ break_joint.z = rope_theta;
         }
         double dtt;
         dtt = ros::Time::now().toSec() - time_now;
-        if(dtt > 2.0){
+        if(dtt > dur_time){
         sim_apply_force_.x = 0;
         sim_apply_force_.y = 0;
         sim_apply_force_.z = 0;

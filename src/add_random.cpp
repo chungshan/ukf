@@ -3,9 +3,11 @@
 #include <iostream>
 #include <iterator>
 #include <random>
+#include <sensor_msgs/Imu.h>
 // add random noise to pose
 geometry_msgs::PoseStamped pose,pose_random;
-geometry_msgs::Point pose_v;
+geometry_msgs::Point pose_v, acc_;
+sensor_msgs::Imu drone_imu;
 float RandomFloat(float a, float b) {
     float random = ((float) rand()) / (float) RAND_MAX;
     float diff = b - a;
@@ -15,6 +17,12 @@ float RandomFloat(float a, float b) {
 void pose_cb(const geometry_msgs::PoseStamped::ConstPtr &msg){
   pose = *msg;
 }
+void imu_cb(const sensor_msgs::Imu::ConstPtr &msg){
+  drone_imu = *msg;
+  acc_.x = drone_imu.linear_acceleration.x;
+  acc_.y = drone_imu.linear_acceleration.y;
+  acc_.z = drone_imu.linear_acceleration.z;
+}
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "add_random");
@@ -23,6 +31,8 @@ int main(int argc, char **argv)
   ros::Publisher drone_pub = nh.advertise<geometry_msgs::PoseStamped>("/drone3/mavros/vision_pose/pose",2);
   ros::Publisher poser_pub = nh.advertise<geometry_msgs::Point>("/pose_random",2);
   ros::Publisher pose_pub = nh.advertise<geometry_msgs::Point>("/pose",2);
+  ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/mavros/imu/data_raw", 2, imu_cb);
+  ros::Publisher imu_pub = nh.advertise<geometry_msgs::Point>("/acc", 2);
   ros::Rate rate(30);
   const double mean = 0.0;
   const double stddev = 0.1;
@@ -31,7 +41,7 @@ int main(int argc, char **argv)
   std::normal_distribution<double> disty(mean,stddev);
   std::normal_distribution<double> distz(mean,stddev);
   while (ros::ok()) {
-    if(pose.pose.position.x != 0){
+
     float rand_value_x, rand_value_y, rand_value_z;
 
 
@@ -52,9 +62,10 @@ int main(int argc, char **argv)
     pose_v.y = pose.pose.position.y;
     pose_v.z = pose.pose.position.z;
     //poser_pub.publish(pose_random);
+    imu_pub.publish(acc_);
     pose_pub.publish(pose_v);
     drone_pub.publish(pose_random);
-    }
+
     ros::spinOnce();
     rate.sleep();
   }

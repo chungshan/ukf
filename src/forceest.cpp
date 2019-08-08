@@ -130,16 +130,17 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         if(omegaz ==0){
           omegaz = 0.0001;
         }
-
-        //omegax = angular_v_measure(0) - betax;
-        //omegay = angular_v_measure(1) - betay;
-        //omegaz = angular_v_measure(2) - betaz;
-
+/*
+        omegax = angular_v_measure(0) - betax;
+        omegay = angular_v_measure(1) - betay;
+        omegaz = angular_v_measure(2) - betaz;
+        */
+/*
         omegax = omegax - omega_bias(0);
         omegay = omegay - omega_bias(1);
         omegaz = omegaz - omega_bias(2);
-
-        //omega_v1 << omegax, omegay, omegaz;
+*/
+//        omega_v1 << omegax, omegay, omegaz;
         omega_value = omegax*omegax+omegay*omegay+omegaz*omegaz;
         omega << cos(0.5*sqrt(omega_value)*delta_t), sin(0.5*sqrt(omega_value)*delta_t)*omegaz/(sqrt(omega_value)), -sin(0.5*sqrt(omega_value)*delta_t)*omegay/(sqrt(omega_value)), sin(0.5*sqrt(omega_value)*delta_t)*omegax/(sqrt(omega_value)),
                  -sin(0.5*sqrt(omega_value)*delta_t)*omegaz/(sqrt(omega_value)), cos(0.5*sqrt(omega_value)*delta_t), sin(0.5*sqrt(omega_value)*delta_t)*omegax/(sqrt(omega_value)), sin(0.5*sqrt(omega_value)*delta_t)*omegay/(sqrt(omega_value)),
@@ -227,9 +228,9 @@ Eigen::MatrixXd forceest::  dynamics(Eigen::MatrixXd sigma_state){
         predict_sigma_state(p_z,i) = p_v1(2);
 //*(1-Ts/tau_bar)
         // + gausian_noise(0)
-        predict_sigma_state(F_x,i) = Fx+ gausian_noise(0);
-        predict_sigma_state(F_y,i) = Fy+ gausian_noise(1);
-        predict_sigma_state(F_z,i) = Fz+ gausian_noise(2);
+        predict_sigma_state(F_x,i) = Fx;//
+        predict_sigma_state(F_y,i) = Fy;//+ gausian_noise(1)
+        predict_sigma_state(F_z,i) = Fz;
         predict_sigma_state(tau_z,i) = tauz;
 
         predict_sigma_state(v_x,i) = v_k1(0);
