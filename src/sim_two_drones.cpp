@@ -568,7 +568,7 @@ Eigen::Vector4d cmdbodyrate_;
  if(swing_up_control == true){
    //ux = 0.4*(E-E_des)*omega*cos(theta) + 0.1 * copysign(1,host_mocap.pose.position.x) * log(1-fabs(host_mocap.pose.position.x)/1);
 
-   k_sw = 20;
+   k_sw = 25;
    /*Test for limited path
    if(host_mocap.pose.position.x < -0.5 && host_mocap.pose.position.x > -1){
      if(omega*cos(theta) < 0){

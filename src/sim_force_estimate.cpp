@@ -390,18 +390,18 @@ if(drone_flag==3){
 
 if(drone_flag==2){
   double a;
-/*
+
     F1 = (8.1733*1e-4*(pwm3*pwm3) - 1.2950*pwm3 + 397)*9.8/1000; //drone2
     F2 = (8.1733*1e-4*(pwm1*pwm1) - 1.2950*pwm1 + 397)*9.8/1000; //left_right:265.7775
     F3 = (8.1733*1e-4*(pwm4*pwm4) - 1.2950*pwm4 + 397)*9.8/1000; //up_down:265.7775
     F4 = (8.1733*1e-4*(pwm2*pwm2) - 1.2950*pwm2 + 397)*9.8/1000; //sim:397
+
+/*
+  F1 = rotor_1.wrench.force.z;//0.96 for estimate payload's mass
+  F2 = rotor_0.wrench.force.z;
+  F3 = rotor_3.wrench.force.z;
+  F4 = rotor_2.wrench.force.z;
 */
-
-  F1 = 0.96*rotor_1.wrench.force.z;//0.96 for estimate payload's mass
-  F2 = 0.96*rotor_0.wrench.force.z;
-  F3 = 0.96*rotor_3.wrench.force.z;
-  F4 = 0.96*rotor_2.wrench.force.z;
-
   battery_p.x = F1+F2+F3+F4;
 /*
   F1 = (8.0274*1e-4*(pwm3*pwm3) - 1.441*pwm3 +  587.9219)*9.8/1000; //drone2
